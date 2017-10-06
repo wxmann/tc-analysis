@@ -61,8 +61,6 @@ _HDOB_COLUMNS = ['time', 'lat', 'lon', 'pressure', 'height',
                  'xtrp_sfc_pressure', 'temp', 'dewpt', 'wind',
                  'peak_fl_wind', 'sfmr_wind', 'sfmr_rain_rates', 'qc']
 
-# _METADATA_ROW = 2
-
 _HDOB_MISSING_VALUES = ['/' * n for n in range(1, 6)]
 
 vectorqty = namedtuple('vectorqty', 'speed dir')
