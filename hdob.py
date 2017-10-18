@@ -49,7 +49,7 @@ def hdob_links_between(t1, t2, basin):
         if not timestamp_match:
             raise DataRetrievalException("Could not find timestamp for: {}".format(file_url))
         timestamp_str = timestamp_match.group(0)
-        return datetime.strptime(timestamp_str[1:-1], '%Y%m%d%M%S')
+        return datetime.strptime(timestamp_str[1:-1], '%Y%m%d%H%M')
 
     hdob_links = get_links(hdobs_loc, 'txt')
     for hdob_link in hdob_links:
@@ -135,6 +135,7 @@ def decode_hdob_content(hdob_lines, header, missing_value=''):
 HDOBHeader = namedtuple('HDOBHeader', 'aircraft storm ob_seq start_date')
 
 columns = column_definition('HDOBColumns', _HDOB_COLUMNS)
+
 
 class HDOB(object):
     def __init__(self, header, data):
