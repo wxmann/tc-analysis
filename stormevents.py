@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 
 import pandas as pd
 
@@ -28,15 +29,25 @@ def _year_from_link(link):
                                      "CSV link: {}".format(link))
 
 
-def load_df_from(file):
-    raw_data = pd.read_csv(file,
-                           parse_dates=['BEGIN_DATE_TIME', 'END_DATE_TIME'],
-                           compression='infer')
-    raw_data.columns = map(str.lower, raw_data.columns)
-    return raw_data
+def load_file(file, keep_data_start=None, keep_data_end=None,
+              eventtypes=None, states=None):
+    df = pd.read_csv(file,
+                     parse_dates=['BEGIN_DATE_TIME', 'END_DATE_TIME'],
+                     compression='infer')
+    df.columns = map(str.lower, df.columns)
+
+    if keep_data_start and keep_data_end:
+        df = df[(df.begin_date_time >= keep_data_start) & (df.begin_date_time < keep_data_end)]
+    if eventtypes:
+        eventtypes1 = [e[:1].upper() + e[1:].lower() for e in eventtypes]
+        df = df[df.event_type.isin(eventtypes1)]
+    if states is not None:
+        df = df[df.state.isin([state.upper() for state in states])]
+
+    return df
 
 
-def load(start, end, eventtype):
+def load_events(start, end, eventtypes=None, states=None):
     if end < start:
         raise ValueError("End date must be on or after start date")
     year1 = start.year
@@ -46,14 +57,22 @@ def load(start, end, eventtype):
     dfs = []
 
     def load_df_with_filter(file):
-        df = load_df_from(file)
-        df = df[(df.begin_date_time >= start) & (df.begin_date_time < end)]
-        df = df[df.event_type == eventtype]
+        df = load_file(file, start, end, eventtypes, states)
         dfs.append(df)
 
     successes, errors = bulksave(links, postsave=load_df_with_filter)
     if errors:
         import warnings
-        warnings.warn('There were errors trying to load a few dataframes')
+        err_yrs = [str(_year_from_link(err_link)) for err_link in errors]
+        warnings.warn('There were errors trying to load dataframes for years: {}'.format(','.join(err_yrs)))
 
-    return pd.concat(dfs)
+    if dfs:
+        return pd.concat(dfs)
+    else:
+        return pd.DataFrame()
+
+
+def load_events_year(year, eventtypes=None, states=None):
+    start = datetime(year, 1, 1)
+    end = datetime(year, 12, 31, 23, 59)
+    return load_events(start, end, eventtypes, states)
