@@ -1,7 +1,9 @@
 import re
 from datetime import datetime
+from functools import partial
 
 import pandas as pd
+import six
 
 from common import get_links, DataRetrievalException
 from workdir import bulksave
@@ -39,8 +41,7 @@ def load_file(file, keep_data_start=None, keep_data_end=None,
     if keep_data_start and keep_data_end:
         df = df[(df.begin_date_time >= keep_data_start) & (df.begin_date_time < keep_data_end)]
     if eventtypes:
-        eventtypes1 = [e[:1].upper() + e[1:].lower() for e in eventtypes]
-        df = df[df.event_type.isin(eventtypes1)]
+        df = df[df.event_type.isin(eventtypes)]
     if states is not None:
         df = df[df.state.isin([state.upper() for state in states])]
 
@@ -48,17 +49,23 @@ def load_file(file, keep_data_start=None, keep_data_end=None,
 
 
 def load_events(start, end, eventtypes=None, states=None):
+    if isinstance(start, six.string_types):
+        start = pd.Timestamp(start)
+    if isinstance(end, six.string_types):
+        end = pd.Timestamp(end)
+
     if end < start:
         raise ValueError("End date must be on or after start date")
     year1 = start.year
     year2 = end.year
     links = urls_for(range(year1, year2 + 1))
 
-    dfs = []
+    dfs = {}
 
     def load_df_with_filter(file):
-        df = load_file(file, start, end, eventtypes, states)
-        dfs.append(df)
+        df = load_file(file, keep_data_start=None, keep_data_end=None,
+                       eventtypes=eventtypes, states=states)
+        dfs[_year_from_link(file)] = df
 
     successes, errors = bulksave(links, postsave=load_df_with_filter)
     if errors:
@@ -67,12 +74,28 @@ def load_events(start, end, eventtypes=None, states=None):
         warnings.warn('There were errors trying to load dataframes for years: {}'.format(','.join(err_yrs)))
 
     if dfs:
-        return pd.concat(dfs)
+        years = sorted(dfs.keys())
+
+        earliest_year = years[0]
+        first = dfs[earliest_year]
+        dfs[earliest_year] = first[(first.begin_date_time >= start)]
+
+        latest_year = years[-1]
+        last = dfs[latest_year]
+        dfs[latest_year] = last[(last.begin_date_time < end)]
+
+        return pd.concat(dfs.values())
     else:
         return pd.DataFrame()
 
 
 def load_events_year(year, eventtypes=None, states=None):
     start = datetime(year, 1, 1)
-    end = datetime(year, 12, 31, 23, 59)
+    end = datetime(year, 12, 31, 23, 59, 59)
     return load_events(start, end, eventtypes, states)
+
+
+tornadoes = partial(load_events, eventtypes=['Tornado'])
+hail = partial(load_events, eventtypes=['Hail'])
+tstorm_wind = partial(load_events, eventtypes=['Thunderstorm Wind'])
+all_severe = partial(load_events, eventtypes=['Tornado', 'Hail', 'Thunderstorm Wind'])

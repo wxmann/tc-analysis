@@ -82,4 +82,4 @@ def saveall(src_dest_map, override_existing=False, callback=None):
 
     reqs = (grequests.get(src_url, hooks=dict(response=save_and_exec_callback)) for src_url
             in src_dest_map)
-    return grequests.map(reqs, stream=True, size=10)
+    return grequests.map(reqs, stream=True, size=6)
