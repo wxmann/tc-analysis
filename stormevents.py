@@ -10,14 +10,18 @@ from workdir import bulksave
 
 
 def urls_for(years):
-    links = get_links('https://www1.ncdc.noaa.gov/pub/data/swdi/stormevents/csvfiles/')
-    for link in links:
-        try:
-            year = _year_from_link(link)
-            if int(year) in years:
-                yield link
-        except DataRetrievalException:
-            pass
+    return get_links('https://www1.ncdc.noaa.gov/pub/data/swdi/stormevents/csvfiles/',
+                     file_filter=_year_filter(years))
+
+
+def _year_filter(years):
+    years = (str(yr) for yr in years)
+    regex = r'StormEvents_details-ftp_v\d{1}\.\d{1}_d({YEARS})_c\d{8}.csv.gz'.replace(r'{YEARS}', '|'.join(years))
+
+    def ret(link):
+        return bool(re.search(regex, link))
+
+    return ret
 
 
 def _year_from_link(link):

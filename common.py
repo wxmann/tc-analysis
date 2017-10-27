@@ -12,7 +12,7 @@ class DataRetrievalException(Exception):
     pass
 
 
-def get_links(url, ext=None):
+def get_links(url, ext=None, file_filter=None):
     if not url:
         raise ValueError("Must enter a non-empty url")
     if url[-1] == '/':
@@ -25,8 +25,13 @@ def get_links(url, ext=None):
 
     page_text = resp.text
     parser = BeautifulSoup(page_text, 'html.parser')
-    return [url + '/' + node.get('href') for node in parser.find_all('a')
-            if node.get('href').endswith(ext)]
+    results = (url + '/' + node.get('href') for node in parser.find_all('a')
+               if node.get('href').endswith(ext))
+
+    if file_filter is not None:
+        return [result for result in results if file_filter(result)]
+    else:
+        return list(results)
 
 
 # TODO: convert this to iterator over mutliple urls
@@ -73,18 +78,18 @@ def save_response_content(response, saveloc):
 
 
 class _SaveResult(object):
-    def __init__(self, url, dest, response, executed_save, expected_status=200):
+    def __init__(self, url, dest, response, executed_request, expected_status=200):
         self.url = url
         self.dest = dest
         self.response = response
         self.exceptions = []
         self.output = None
-        self._executed_save = executed_save
+        self._executed_request = executed_request
         self._expected_status = expected_status
 
     @property
     def success(self):
-        if self._executed_save:
+        if self._executed_request:
             http_success = self.response is not None and self.response.status_code == self._expected_status
         else:
             http_success = True
@@ -94,7 +99,7 @@ class _SaveResult(object):
     def __str__(self):
         if self.response is not None:
             response_str = self.response.status_code
-        elif not self._executed_save:
+        elif not self._executed_request:
             response_str = 'No HTTP call executed'
         else:
             response_str = 'No response'
@@ -121,12 +126,12 @@ def _save_and_exec_callback(url, src_dest_map, override_existing, callback):
 
     dest = src_dest_map[url]
     if not override_existing and os.path.isfile(dest):
-        result = _SaveResult(url, dest, response=None, executed_save=False)
+        result = _SaveResult(url, dest, response=None, executed_request=False)
         wrapped_callback(dest, result)
         return result
     else:
         response = requests.get(url, stream=True)
-        result = _SaveResult(url, dest, response, executed_save=True)
+        result = _SaveResult(url, dest, response, executed_request=True)
 
         if response is not None:
             try:
