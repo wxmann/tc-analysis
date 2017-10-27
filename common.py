@@ -1,8 +1,9 @@
 import os
 import shutil
 from collections import namedtuple
+from functools import partial
+from multiprocessing import Pool
 
-import grequests
 import requests
 from bs4 import BeautifulSoup
 
@@ -71,15 +72,67 @@ def save_response_content(response, saveloc):
         shutil.copyfileobj(response.raw, f)
 
 
-def saveall(src_dest_map, override_existing=False, callback=None):
-    def save_and_exec_callback(response, **kwargs):
-        if response is not None:
-            dest = src_dest_map[response.url]
-            if override_existing or not os.path.isfile(dest):
-                save_response_content(response, dest)
-            if callback is not None and os.path.isfile(dest):
-                callback(dest)
+class _SaveResult(object):
+    def __init__(self, url, dest, response, executed_save, expected_status=200):
+        self.url = url
+        self.dest = dest
+        self.response = response
+        self.exceptions = []
+        self.output = None
+        self._executed_save = executed_save
+        self._expected_status = expected_status
 
-    reqs = (grequests.get(src_url, hooks=dict(response=save_and_exec_callback)) for src_url
-            in src_dest_map)
-    return grequests.map(reqs, stream=True, size=6)
+    @property
+    def success(self):
+        if self._executed_save:
+            http_success = self.response is not None and self.response.status_code == self._expected_status
+        else:
+            http_success = True
+
+        return http_success and not self.exceptions
+
+    def __str__(self):
+        if self.response is not None:
+            response_str = self.response.status_code
+        elif not self._executed_save:
+            response_str = 'No HTTP call executed'
+        else:
+            response_str = 'No response'
+        return '<URL: {}, Response: {}, Callback exceptions: {}>'.format(self.url, response_str,
+                                                                         len(self.exceptions))
+
+
+def saveall(src_dest_map, override_existing=False, callback=None):
+    save_and_exec = partial(_save_and_exec_callback, src_dest_map=src_dest_map,
+                            override_existing=override_existing, callback=callback)
+    with Pool(4) as pool:
+        return pool.map(save_and_exec, src_dest_map.keys())
+
+
+def _save_and_exec_callback(url, src_dest_map, override_existing, callback):
+    def wrapped_callback(arg, save_result):
+        if callback is not None:
+            try:
+                # print("arrived at callback for: {}".format(arg))
+                ret = callback(arg)
+                save_result.output = ret
+            except Exception as e:
+                save_result.exceptions.append(e)
+
+    dest = src_dest_map[url]
+    if not override_existing and os.path.isfile(dest):
+        result = _SaveResult(url, dest, response=None, executed_save=False)
+        wrapped_callback(dest, result)
+        return result
+    else:
+        response = requests.get(url, stream=True)
+        result = _SaveResult(url, dest, response, executed_save=True)
+
+        if response is not None:
+            try:
+                response.raise_for_status()
+                save_response_content(response, dest)
+                wrapped_callback(dest, result)
+            except requests.HTTPError as e:
+                result.exceptions.append(e)
+        return result

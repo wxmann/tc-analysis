@@ -22,32 +22,26 @@ def get():
     return workdir
 
 
-def filename_from(url):
+def setto(directory):
+    os.environ[VAR] = directory
+
+
+def save_dest(url):
+    workdir = get()
     relpath = urlparse(url)
-    return os.path.basename(relpath.path)
+    filename = os.path.basename(relpath.path)
+
+    if filename and '.' in filename:
+        return os.path.join(workdir, filename)
+    else:
+        return ''
 
 
 def bulksave(urls, override_existing=False, postsave=None):
-    workdir = get()
-    no_file = ''
+    src_dest_map = {}
+    for url in urls:
+        dest = save_dest(url)
+        if dest:
+            src_dest_map[url] = dest
 
-    def dest(url):
-        filename = filename_from(url)
-        if filename and '.' in filename:
-            return os.path.join(workdir, filename)
-        else:
-            return no_file
-
-    src_dest_map = {url: dest(url) for url in urls if dest(url) != no_file}
-    responses = saveall(src_dest_map, override_existing, postsave)
-
-    successes = {}
-    for resp in responses:
-        if resp is not None:
-            # HACK: if the file already exists, assume it's okay regardless of outcome
-            # of HTTP request
-            if os.path.isfile(src_dest_map[resp.url]):
-                successes[resp.url] = src_dest_map[resp.url]
-
-    errors = {k: v for k, v in src_dest_map.items() if k not in successes}
-    return successes, errors
+    return saveall(src_dest_map, override_existing, postsave)

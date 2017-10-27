@@ -60,31 +60,21 @@ def load_events(start, end, eventtypes=None, states=None):
     year2 = end.year
     links = urls_for(range(year1, year2 + 1))
 
-    dfs = {}
+    load_df_with_filter = partial(load_file, keep_data_start=None, keep_data_end=None,
+                                  eventtypes=eventtypes, states=states)
 
-    def load_df_with_filter(file):
-        df = load_file(file, keep_data_start=None, keep_data_end=None,
-                       eventtypes=eventtypes, states=states)
-        dfs[_year_from_link(file)] = df
+    results = bulksave(links, postsave=load_df_with_filter)
+    dfs = [result.output for result in results if result.success and result.output is not None]
+    errors = [result for result in results if not result.success]
 
-    successes, errors = bulksave(links, postsave=load_df_with_filter)
     if errors:
         import warnings
-        err_yrs = [str(_year_from_link(err_link)) for err_link in errors]
+        err_yrs = [str(_year_from_link(err.url)) for err in errors]
         warnings.warn('There were errors trying to load dataframes for years: {}'.format(','.join(err_yrs)))
 
     if dfs:
-        years = sorted(dfs.keys())
-
-        earliest_year = years[0]
-        first = dfs[earliest_year]
-        dfs[earliest_year] = first[(first.begin_date_time >= start)]
-
-        latest_year = years[-1]
-        last = dfs[latest_year]
-        dfs[latest_year] = last[(last.begin_date_time < end)]
-
-        return pd.concat(dfs.values())
+        ret = pd.concat(dfs)
+        return ret[(ret.begin_date_time >= start) & (ret.begin_date_time < end)]
     else:
         return pd.DataFrame()
 
