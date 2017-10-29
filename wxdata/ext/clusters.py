@@ -1,11 +1,10 @@
+import matplotlib.cm as cm
 import numpy as np
 import pandas as pd
-from sklearn.cluster import DBSCAN
 from shapely.geometry import MultiPoint
+from sklearn.cluster import DBSCAN
 
-import matplotlib.cm as cm
-
-from projects import map_plotting
+from wxdata import map_plotting
 
 
 def temporal_discretize(torn_seg, spacing_min=1):

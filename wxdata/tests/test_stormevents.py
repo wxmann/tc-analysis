@@ -1,7 +1,7 @@
 import os
 from unittest import mock
 
-from stormevents import urls_for
+from wxdata.stormevents import urls_for
 
 
 def open_resource(filename, *args, **kwargs):
@@ -10,7 +10,7 @@ def open_resource(filename, *args, **kwargs):
     return open(file, *args, **kwargs)
 
 
-@mock.patch('common.requests')
+@mock.patch('wxdata.common.requests')
 def test_urls_for(req):
     response = mock.MagicMock()
     req.get.return_value = response

@@ -5,8 +5,8 @@ from functools import partial
 import pandas as pd
 import six
 
-from common import get_links, DataRetrievalException
-from workdir import bulksave
+from wxdata.common import get_links, DataRetrievalException
+from wxdata.workdir import bulksave
 
 
 def urls_for(years):
