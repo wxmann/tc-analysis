@@ -110,8 +110,13 @@ class _SaveResult(object):
 def saveall(src_dest_map, override_existing=False, callback=None):
     save_and_exec = partial(_save_and_exec_callback, src_dest_map=src_dest_map,
                             override_existing=override_existing, callback=callback)
-    with Pool(4) as pool:
-        return pool.map(save_and_exec, src_dest_map.keys())
+
+    if len(src_dest_map) <= 1:
+        return map(save_and_exec, src_dest_map.keys())
+    else:
+        numprocesses = min(len(src_dest_map), 4)
+        with Pool(numprocesses) as pool:
+            return pool.map(save_and_exec, src_dest_map.keys())
 
 
 def _save_and_exec_callback(url, src_dest_map, override_existing, callback):
