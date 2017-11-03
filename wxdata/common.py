@@ -112,7 +112,7 @@ def saveall(src_dest_map, override_existing=False, callback=None):
                             override_existing=override_existing, callback=callback)
 
     if len(src_dest_map) <= 1:
-        return map(save_and_exec, src_dest_map.keys())
+        return list(map(save_and_exec, src_dest_map.keys()))
     else:
         numprocesses = min(len(src_dest_map), 4)
         with Pool(numprocesses) as pool:
