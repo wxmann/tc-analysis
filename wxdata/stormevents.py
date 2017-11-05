@@ -42,7 +42,7 @@ def load_file(file, keep_data_start=None, keep_data_end=None,
               eventtypes=None, states=None, tz=None):
     df = pd.read_csv(file,
                      parse_dates=['BEGIN_DATE_TIME', 'END_DATE_TIME'],
-                     # infer_datetime_format=True,
+                     infer_datetime_format=True,
                      compression='infer')
     df.columns = map(str.lower, df.columns)
 
@@ -58,7 +58,7 @@ def load_file(file, keep_data_start=None, keep_data_end=None,
     return df
 
 
-def load_events(start, end, eventtypes=None, states=None, tz=None):
+def load_events(start, end, eventtypes=None, states=None, tz=None, debug=False):
     if isinstance(start, six.string_types):
         start = pd.Timestamp(start)
     if isinstance(end, six.string_types):
@@ -83,9 +83,14 @@ def load_events(start, end, eventtypes=None, states=None, tz=None):
 
     if dfs:
         ret = pd.concat(dfs, ignore_index=True)
-        return ret[(ret.begin_date_time >= start) & (ret.begin_date_time < end)]
+        ret = ret[(ret.begin_date_time >= start) & (ret.begin_date_time < end)]
     else:
-        return pd.DataFrame()
+        ret = pd.DataFrame()
+
+    if debug:
+        return results, ret
+    else:
+        return ret
 
 
 def load_events_year(year, **kwargs):
@@ -164,14 +169,11 @@ def convert_row_tz(row, col, to_tz):
 
                 # have to do some fudging here since parsed TZ from the geopy module
                 # is DST-dependent. Our data is frozen onto one TZ.
-                dummy_time = pd.Timestamp('2017-01-01')
-                offset_time = dummy_time + tz.utcoffset(dummy_time, is_dst=False)
-
-                if offset_time < dummy_time:
-                    hour_offset = 24 - offset_time.hour
-                    return convert_timestamp_tz(row[col], 'Etc/GMT+{}'.format(hour_offset), to_tz)
+                hour_offset = _tzhelp.utc_offset_no_dst(tz)
+                if hour_offset < 0:
+                    return convert_timestamp_tz(row[col], 'Etc/GMT+{}'.format(-hour_offset), to_tz)
                 else:
-                    return convert_timestamp_tz(row[col], 'Etc/GMT-{}'.format(offset_time.hour), to_tz)
+                    return convert_timestamp_tz(row[col], 'Etc/GMT-{}'.format(hour_offset), to_tz)
         except KeyError:
             warnings.warn("Can't find timezone with missing lat lon or state data.")
 
@@ -188,7 +190,8 @@ def convert_timestamp_tz(timestamp, from_tz, to_tz):
 
 def _pdtz_from_str(tz_str):
     if not tz_str or tz_str in ('UTC', 'GMT'):
-        return tz_str
+        import pytz
+        return pytz.timezone('GMT')
 
     tz_str_up = tz_str.upper()
     # handle the weird cases
@@ -200,3 +203,7 @@ def _pdtz_from_str(tz_str):
 
     # we're safe; fallback to our usual timezone parsing logic
     return _tzhelp.parse_tz(tz_str)
+
+
+def export(df, saveloc, **kwargs):
+    df.to_csv(saveloc, header=[col.upper() for col in df.columns], **kwargs)

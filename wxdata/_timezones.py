@@ -91,42 +91,51 @@ def tz_for_latlon(lat, lon):
         raise
 
     g = geocoders.GoogleV3()
-    tz = g.timezone((lat, lon))
-    return tz
+    found_tz = g.timezone((lat, lon))
+    return found_tz
 
 
 _timezone_map = {}
 for tz in SUPPORTED_TIMEZONES:
     _timezone_map[tz.abbrev] = tz
-
     _timezone_map['{}{}'.format(tz.abbrev, tz.utc_offset)] = tz
     # support for both +0 and -0
     _timezone_map['GMT-0'] = GMT
     _timezone_map['UTC'] = GMT
 
 
+def get_tz_info(abbrev):
+    if abbrev is None:
+        raise ValueError('Cannot get TZ info for `None`')
+    tz_str = abbrev.upper().strip()
+    if tz_str not in _timezone_map:
+        raise ValueError("Invalid tz: {} (or offset does not match tz abbrevation)".format(tz_str))
+    return _timezone_map[tz_str]
+
+
 def parse_tz(tz_str):
     if tz_str is None:
-        return pytz.UTC
+        return get_tz_info(tz_str).to_pytz()
     try:
         # we're good here
         return pytz.timezone(tz_str)
     except pytz.UnknownTimeZoneError:
         # get it from our hard-coded list
-        tz_str = tz_str.upper().strip()
-        if tz_str not in _timezone_map:
-            raise ValueError("Invalid tz: {} (or offset does not match tz abbrevation)".format(tz_str))
-        return _timezone_map[tz_str].to_pytz()
+        return get_tz_info(tz_str).to_pytz()
 
 
-_tz_offset_map = {tz.abbrev: tz for tz in SUPPORTED_TIMEZONES}
-_tz_offset_map['UTC'] = GMT
-
-
-def offset_from_utc(abbrev):
-    if not abbrev:
-        return 0
+def utc_offset_no_dst(tz_str, as_of=None):
     try:
-        return _tz_offset_map[abbrev.upper().strip()].utc_offset
-    except KeyError:
-        raise ValueError("Invalid tz: {}".format(abbrev))
+        from datetime import datetime, timedelta
+        tz = pytz.timezone(tz_str)
+        if as_of is None:
+            as_of = datetime(datetime.now().year, 1, 1)
+        dt = tz.utcoffset(as_of) - tz.dst(as_of)
+
+        if dt < timedelta(0):
+            return -24 + dt.seconds // 3600
+        return dt.seconds // 3600
+
+    except pytz.UnknownTimeZoneError:
+        tz = get_tz_info(tz_str)
+        return tz.utc_offset - tz.isdst
