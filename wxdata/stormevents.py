@@ -7,6 +7,7 @@ import pandas as pd
 import pytz
 import six
 
+from wxdata import _timezones as _tzhelp
 from wxdata.common import get_links, DataRetrievalException
 from wxdata.workdir import bulksave
 
@@ -41,17 +42,18 @@ def load_file(file, keep_data_start=None, keep_data_end=None,
               eventtypes=None, states=None, tz=None):
     df = pd.read_csv(file,
                      parse_dates=['BEGIN_DATE_TIME', 'END_DATE_TIME'],
+                     # infer_datetime_format=True,
                      compression='infer')
     df.columns = map(str.lower, df.columns)
 
+    if tz:
+        df = convert_df_tz(df, tz, False)
     if keep_data_start and keep_data_end:
         df = df[(df.begin_date_time >= keep_data_start) & (df.begin_date_time < keep_data_end)]
     if eventtypes:
         df = df[df.event_type.isin(eventtypes)]
     if states:
         df = df[df.state.isin([state.upper() for state in states])]
-    if tz:
-        df = standardize_df_tz(df, tz, False)
 
     return df
 
@@ -81,7 +83,7 @@ def load_events(start, end, eventtypes=None, states=None, tz=None):
         warnings.warn('There were errors trying to load dataframes for years: {}'.format(','.join(err_yrs)))
 
     if dfs:
-        ret = pd.concat(dfs)
+        ret = pd.concat(dfs, ignore_index=True)
         return ret[(ret.begin_date_time >= start) & (ret.begin_date_time < end)]
     else:
         return pd.DataFrame()
@@ -102,7 +104,7 @@ all_severe = partial(load_events, eventtypes=['Tornado', 'Hail', 'Thunderstorm W
 ### TIMEZONE UTILITIES ###
 
 
-def standardize_df_tz(df, tz='CST', copy=True):
+def convert_df_tz(df, to_tz='CST', copy=True):
     if copy:
         df = df.copy()
 
@@ -110,14 +112,13 @@ def standardize_df_tz(df, tz='CST', copy=True):
         return (c for c in cols if c in df.columns)
 
     for col in _cols_in_df('begin_date_time', 'end_date_time'):
-        df[col] = df.apply(lambda row: convert_tz(row[col], row.cz_timezone, tz), axis=1)
+        df[col] = df.apply(lambda row: convert_row_tz(row, col, to_tz), axis=1)
 
     for flag, temporal_accessor in product(('begin', 'end'), ('yearmonth', 'time', 'day')):
         col = '{}_{}'.format(flag, temporal_accessor)
         src = '{}_date_time'.format(flag)
 
         if col in df.columns and src in df.columns:
-            # get_val = partial(_get_val, temporal_accessor=temporal_accessor, src=src)
             def get_val(row):
                 if temporal_accessor == 'yearmonth':
                     return row[src].strftime('%Y%m')
@@ -126,55 +127,82 @@ def standardize_df_tz(df, tz='CST', copy=True):
                 elif temporal_accessor == 'day':
                     return row[src].day
                 else:
-                    raise ValueError("This should not happen -- location: standardize DF timestamps")
+                    raise ValueError("This should not happen -- location: convert DF timezone")
             df[col] = df.apply(get_val, axis=1)
 
     for col in _cols_in_df('month_name'):
         if 'begin_date_time' in df.columns:
             df[col] = df.apply(lambda row: row['begin_date_time'].strftime('%B'), axis=1)
 
+    df['cz_timezone'] = to_tz
     return df
 
 
-def convert_tz(timestamp, original_tz, new_tz):
-    original_tz_pd = _pdtz_from_str(original_tz)
-    new_tz_pd = _pdtz_from_str(new_tz)
+def convert_row_tz(row, col, to_tz):
+    try:
+        return convert_timestamp_tz(row[col], row['cz_timezone'], to_tz)
+    except ValueError as e:
+        import warnings
+        warnings.warn("Encountered an error while converting time zone, {}. "
+                      "\nAttempting to use location data to determine tz".format(repr(e)))
+        try:
+            state = row['state']
+            if row.cz_timezone == 'AST':
+                if state == 'ALASKA':
+                    return convert_timestamp_tz(row[col], 'AKST-9', to_tz)
+                else:
+                    # both Puerto Rico and Virgin Islands in AST
+                    return convert_timestamp_tz(row[col], 'AST-4', to_tz)
+            else:
+                tz = _tzhelp.tz_for_state(state)
+                if tz:
+                    return tz.localize(row[col]).tz_convert(to_tz)
+                else:
+                    lat, lon = row['begin_lat'], row['begin_lon']
+                    tz = _tzhelp.tz_for_latlon(lat, lon)
+                    dummy_time = pd.Timestamp('2017-01-01')
+                    offset_time = dummy_time + tz.utcoffset(dummy_time, is_dst=False)
+
+                    if offset_time < dummy_time:
+                        hour_offset = 24 - offset_time.hour
+                        return convert_timestamp_tz(row[col], 'Etc/GMT+{}'.format(hour_offset), to_tz)
+                    else:
+                        return convert_timestamp_tz(row[col], 'Etc/GMT-{}'.format(offset_time.hour), to_tz)
+        except ImportError:
+            warnings.warn("Can't find timezone from location without the `geopy` module."
+                          "Please install that module.")
+        except KeyError:
+            warnings.warn("Can't find timezone with missing lat lon or state data.")
+
+        raise e
+    except KeyError:
+        raise ValueError("Row must have column specific and `cz_timezone` column")
+
+
+def convert_timestamp_tz(timestamp, from_tz, to_tz):
+    original_tz_pd = _pdtz_from_str(from_tz)
+    new_tz_pd = _pdtz_from_str(to_tz)
     return pd.Timestamp(timestamp, tz=original_tz_pd).tz_convert(new_tz_pd)
 
 
 def _pdtz_from_str(tz_str):
-    if not tz_str:
-        return 'UTC'
-    try:
-        # we're good here; pandas uses pytz to parse timezone strings
-        return pytz.timezone(tz_str)
-    except pytz.UnknownTimeZoneError:
-        # well okay, we gotta do the conversion
-        tz_str = tz_str.strip()[:3].upper()
+    if not tz_str or tz_str in ('UTC', 'GMT'):
+        return tz_str
 
-        if tz_str in ('UTC', 'GMT'):
-            return tz_str
-        elif 'AKST' in tz_str:
-            # Hardcode for AKST in newer entries for AK in the Storm Events Database
-            return 'Etc/GMT+9'
-        elif tz_str[1:] in ('ST', 'DT'):
-            first = tz_str[0]
-            dst = tz_str[1] == 'D'
+    tz_str_up = tz_str.upper()
+    # handle the weird cases
+    if tz_str_up in ('SCT', 'CSC'):
+        # found these egregious typos
+        raise ValueError("{} is probably CST but cannot determine for sure".format(tz_str))
+    elif tz_str_up == 'UNK':
+        raise ValueError("UNK timezone")
+    elif tz_str_up == 'AST':
+        # In older versions of storm events, `AST` and `AKST` are both logged as `AST`.
+        # We can't let our tz-conversion logic believe naively it's Atlantic Standard Time
+        raise ValueError("Ambiguous timezone `AST`; either Alaska or Atlantic standard time")
+    elif tz_str_up == 'GST10':
+        # this is how Guam entries are logged
+        return pytz.timezone('Etc/GMT+10')
 
-            init_delta_map = {
-                'H': -10, # HST
-                'A': -9,  # AKST (referred to as `AST` in older entries in the Storm Events database)
-                'P': -8,  # PST
-                'M': -7,  # MST
-                'C': -6,  # CST
-                'E': -5   # EST
-            }
-
-            try:
-                delta = init_delta_map[first]
-            except KeyError:
-                raise ValueError("Invalid tz: {}".format(tz_str))
-            delta += dst
-            return 'Etc/GMT+{}'.format(-delta)
-        else:
-            raise ValueError("Invalid tz: {}".format(tz_str))
+    # we're safe; fallback to our usual timezone parsing logic
+    return _tzhelp.parse_tz(tz_str)

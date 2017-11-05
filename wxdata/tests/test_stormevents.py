@@ -4,7 +4,7 @@ from unittest import mock
 
 import pandas as pd
 
-from wxdata.stormevents import urls_for, convert_tz
+from wxdata.stormevents import urls_for, convert_timestamp_tz
 
 
 def open_resource(filename, *args, **kwargs):
@@ -31,10 +31,12 @@ def test_urls_for(req):
     assert results == expected_urls
 
 
-def test_convert_tz():
+def test_convert_timestamp_tz():
     original_tzs = ('CST-6', 'CST', 'MDT', 'Etc/GMT+6')
     target_tzs = ('GMT', 'UTC')
 
     for original_tz, target_tz in product(original_tzs, target_tzs):
-        assert convert_tz('2017-01-01 00:00', original_tz, target_tz) == pd.Timestamp('2017-01-01 06:00', tz='GMT')
-        assert convert_tz('2016-12-31 18:00', original_tz, target_tz) == pd.Timestamp('2017-01-01 00:00', tz='GMT')
+        assert convert_timestamp_tz('2017-01-01 00:00',
+                                    original_tz, target_tz) == pd.Timestamp('2017-01-01 06:00', tz='GMT')
+        assert convert_timestamp_tz('2016-12-31 18:00',
+                                    original_tz, target_tz) == pd.Timestamp('2017-01-01 00:00', tz='GMT')
