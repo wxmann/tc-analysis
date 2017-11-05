@@ -36,7 +36,22 @@ def test_convert_timestamp_tz():
     target_tzs = ('GMT', 'UTC')
 
     for original_tz, target_tz in product(original_tzs, target_tzs):
+        # our time to GMT
         assert convert_timestamp_tz('2017-01-01 00:00',
                                     original_tz, target_tz) == pd.Timestamp('2017-01-01 06:00', tz='GMT')
         assert convert_timestamp_tz('2016-12-31 18:00',
                                     original_tz, target_tz) == pd.Timestamp('2017-01-01 00:00', tz='GMT')
+
+        # GMT to our time
+        assert convert_timestamp_tz('2017-01-01 06:00',
+                                    target_tz, original_tz) == pd.Timestamp('2017-01-01 00:00', tz='Etc/GMT+6')
+
+        # converting timestamp object
+        assert convert_timestamp_tz(pd.Timestamp('2017-01-01 00:00'),
+                                    original_tz, target_tz) == pd.Timestamp('2017-01-01 06:00', tz='GMT')
+
+        # converting datetime object
+        from datetime import datetime
+        assert convert_timestamp_tz(datetime(2017, 1, 1, 0, 0),
+                                    original_tz, target_tz) == pd.Timestamp('2017-01-01 06:00', tz='GMT')
+
