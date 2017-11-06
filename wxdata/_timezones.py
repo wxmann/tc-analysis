@@ -1,4 +1,5 @@
 import pytz
+import six
 
 
 class TimeZone(object):
@@ -127,7 +128,11 @@ def parse_tz(tz_str):
 def utc_offset_no_dst(tz_str, as_of=None):
     try:
         from datetime import datetime, timedelta
-        tz = pytz.timezone(tz_str)
+        if isinstance(tz_str, six.string_types):
+            tz = pytz.timezone(tz_str)
+        else:
+            tz = tz_str
+
         if as_of is None:
             as_of = datetime(datetime.now().year, 1, 1)
         dt = tz.utcoffset(as_of) - tz.dst(as_of)

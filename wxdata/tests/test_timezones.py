@@ -60,6 +60,7 @@ def test_utc_offset_no_dst():
     assert _tz.utc_offset_no_dst('America/Chicago') == -6
     assert _tz.utc_offset_no_dst('America/Los_Angeles') == -8
     assert _tz.utc_offset_no_dst('America/Los_Angeles', as_of=datetime(2017, 7, 1)) == -8
+    assert _tz.utc_offset_no_dst(pytz.timezone('America/Chicago')) == -6
     # US abbreviations
     assert _tz.utc_offset_no_dst('CST') == -6
     assert _tz.utc_offset_no_dst('CST-6') == -6

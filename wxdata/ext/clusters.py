@@ -11,7 +11,7 @@ def temporal_discretize(torn_seg, spacing_min=1):
     elapsed_min = (torn_seg.end_date_time - torn_seg.begin_date_time) / pd.Timedelta('1 min')
     slat, slon, elat, elon = torn_seg.begin_lat, torn_seg.begin_lon, torn_seg.end_lat, torn_seg.end_lon
 
-    numpoints = elapsed_min // spacing_min
+    numpoints = elapsed_min // spacing_min + 1
     lat_space = np.linspace(slat, elat, numpoints)
     lon_space = np.linspace(slon, elon, numpoints)
 

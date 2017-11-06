@@ -3,14 +3,20 @@ from itertools import product
 from unittest import mock
 
 import pandas as pd
+import pytz
+from pandas.util.testing import assert_frame_equal
 
+from wxdata import stormevents, _timezones
 from wxdata.stormevents import urls_for, convert_timestamp_tz
 
 
-def open_resource(filename, *args, **kwargs):
+def resource_path(filename):
     this_dir = os.path.dirname(os.path.realpath(__file__))
-    file = os.path.join(this_dir, 'resources', filename)
-    return open(file, *args, **kwargs)
+    return os.path.join(this_dir, 'resources', filename)
+
+
+def open_resource(filename, *args, **kwargs):
+    return open(resource_path(filename), *args, **kwargs)
 
 
 @mock.patch('wxdata.common.requests')
@@ -55,3 +61,24 @@ def test_convert_timestamp_tz():
         assert convert_timestamp_tz(datetime(2017, 1, 1, 0, 0),
                                     original_tz, target_tz) == pd.Timestamp('2017-01-01 06:00', tz='GMT')
 
+
+@mock.patch('wxdata._timezones.tz_for_latlon', return_value=pytz.timezone('Etc/GMT+5'))
+def test_convert_df_timezone(latlontz):
+    src_df = stormevents.load_file(resource_path('stormevents_mixed_tzs.csv'))
+    src_df = src_df[['begin_yearmonth', 'begin_day', 'begin_time', 'end_yearmonth',
+                     'end_day', 'end_time', 'state', 'year', 'month_name', 'event_type',
+                     'cz_name', 'cz_timezone', 'begin_date_time', 'end_date_time',
+                     'begin_lat', 'begin_lon', 'episode_narrative', 'event_narrative']]
+
+    expected_df = _load_localizing_timezones(resource_path('stormevents_mixed_tzs_togmt.csv'))
+    converted_src_df = stormevents.convert_df_tz(src_df, 'GMT')
+    assert_frame_equal(converted_src_df, expected_df)
+
+
+def _load_localizing_timezones(file):
+    df = stormevents.load_file(file)
+    df['begin_date_time'] = df.apply(lambda row: _timezones.parse_tz(row['cz_timezone']).localize(row['begin_date_time']),
+                                     axis=1)
+    df['end_date_time'] = df.apply(lambda row: _timezones.parse_tz(row['cz_timezone']).localize(row['end_date_time']),
+                                   axis=1)
+    return df

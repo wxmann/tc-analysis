@@ -40,10 +40,20 @@ def _year_from_link(link):
 
 def load_file(file, keep_data_start=None, keep_data_end=None,
               eventtypes=None, states=None, tz=None):
+
     df = pd.read_csv(file,
                      parse_dates=['BEGIN_DATE_TIME', 'END_DATE_TIME'],
                      infer_datetime_format=True,
+                     index_col=['EVENT_ID'],
+                     converters={
+                         'BEGIN_TIME': lambda t: t.zfill(4),
+                         'END_TIME': lambda t: t.zfill(4)
+                     },
+                     dtype={'{}_{}'.format(flag, temporal_accessor): object
+                            for flag, temporal_accessor
+                            in product(('BEGIN', 'END'), ('YEARMONTH', 'TIME'))},
                      compression='infer')
+
     df.columns = map(str.lower, df.columns)
 
     if tz:
@@ -109,14 +119,17 @@ all_severe = partial(load_events, eventtypes=['Tornado', 'Hail', 'Thunderstorm W
 
 
 def convert_df_tz(df, to_tz='CST', copy=True):
+    assert all([
+        'state' in df.columns,
+        'cz_timezone' in df.columns,
+        'begin_date_time' in df.columns
+    ])
     if copy:
         df = df.copy()
 
-    def _cols_in_df(*cols):
-        return (c for c in cols if c in df.columns)
-
-    for col in _cols_in_df('begin_date_time', 'end_date_time'):
-        df[col] = df.apply(lambda row: convert_row_tz(row, col, to_tz), axis=1)
+    for col in ('begin_date_time', 'end_date_time'):
+        if col in df.columns:
+            df[col] = df.apply(lambda row: convert_row_tz(row, col, to_tz), axis=1)
 
     for flag, temporal_accessor in product(('begin', 'end'), ('yearmonth', 'time', 'day')):
         col = '{}_{}'.format(flag, temporal_accessor)
@@ -132,11 +145,13 @@ def convert_df_tz(df, to_tz='CST', copy=True):
                     return row[src].day
                 else:
                     raise ValueError("This should not happen -- location: convert DF timezone")
+
             df[col] = df.apply(get_val, axis=1)
 
-    for col in _cols_in_df('month_name'):
-        if 'begin_date_time' in df.columns:
-            df[col] = df.apply(lambda row: row['begin_date_time'].strftime('%B'), axis=1)
+    if 'month_name' in df.columns:
+        df['month_name'] = df.apply(lambda row: row['begin_date_time'].strftime('%B'), axis=1)
+    if 'year' in df.columns:
+        df['year'] = df.apply(lambda row: row['begin_date_time'].year, axis=1)
 
     df['cz_timezone'] = to_tz
     return df
