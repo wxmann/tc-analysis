@@ -44,7 +44,7 @@ def load_file(file, keep_data_start=None, keep_data_end=None,
     df = pd.read_csv(file,
                      parse_dates=['BEGIN_DATE_TIME', 'END_DATE_TIME'],
                      infer_datetime_format=True,
-                     index_col=['EVENT_ID'],
+                     index_col=False,
                      converters={
                          'BEGIN_TIME': lambda t: t.zfill(4),
                          'END_TIME': lambda t: t.zfill(4)
@@ -94,6 +94,7 @@ def load_events(start, end, eventtypes=None, states=None, tz=None, debug=False):
     if dfs:
         ret = pd.concat(dfs, ignore_index=True)
         ret = ret[(ret.begin_date_time >= start) & (ret.begin_date_time < end)]
+        ret.reset_index(drop=True, inplace=True)
     else:
         ret = pd.DataFrame()
 
@@ -221,4 +222,4 @@ def _pdtz_from_str(tz_str):
 
 
 def export(df, saveloc, **kwargs):
-    df.to_csv(saveloc, header=[col.upper() for col in df.columns], **kwargs)
+    df.to_csv(saveloc, header=[col.upper() for col in df.columns], index=False, **kwargs)

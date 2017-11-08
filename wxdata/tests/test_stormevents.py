@@ -6,7 +6,7 @@ import pandas as pd
 import pytz
 from pandas.util.testing import assert_frame_equal
 
-from wxdata import stormevents, _timezones
+from wxdata import stormevents, _timezones, workdir
 from wxdata.stormevents import urls_for, convert_timestamp_tz
 
 
@@ -72,7 +72,39 @@ def test_convert_df_timezone(latlontz):
 
     expected_df = _load_localizing_timezones(resource_path('stormevents_mixed_tzs_togmt.csv'))
     converted_src_df = stormevents.convert_df_tz(src_df, 'GMT')
-    assert_frame_equal(converted_src_df, expected_df)
+    _assert_frame_eq_ignoring_index_and_dtypes(converted_src_df, expected_df)
+
+
+def test_filter_df_stormtype():
+    df = stormevents.load_file(resource_path('stormevents_mixed_tzs.csv'), eventtypes=['Tornado', 'Hail'])
+    eventtypes = df[['event_type']]
+
+    assert len(eventtypes) == 13
+    assert len(eventtypes[eventtypes.event_type == 'Tornado']) == 12
+    assert len(eventtypes[eventtypes.event_type == 'Hail']) == 1
+
+
+def test_filter_df_state():
+    df = stormevents.load_file(resource_path('stormevents_mixed_tzs.csv'), states=['Hawaii', 'Colorado'])
+    states = df[['state']]
+
+    assert len(states) == 4
+    assert len(states[states.state == 'HAWAII']) == 3
+    assert len(states[states.state == 'COLORADO']) == 1
+
+
+@mock.patch('wxdata.common.get_links', return_value=(
+    'StormEvents_details-ftp_v1.0_d1990_c20170717.csv.gz',
+    'StormEvents_details-ftp_v1.0_d1991_c20170717.csv.gz',
+    'StormEvents_details-ftp_v1.0_d1992_c20170717.csv.gz',
+))
+def test_load_multiple_years_storm_data(reqpatch):
+    workdir.setto(resource_path(''))
+    df = stormevents.load_events('1990-01-01', '1992-10-31', eventtypes=['Tornado'],
+                                 states=['Texas', 'Oklahoma', 'Kansas'])
+
+    df_expected = stormevents.load_file(resource_path('multiyear_storm_events_expected.csv'))
+    _assert_frame_eq_ignoring_index_and_dtypes(df, df_expected)
 
 
 def _load_localizing_timezones(file):
@@ -82,3 +114,9 @@ def _load_localizing_timezones(file):
     df['end_date_time'] = df.apply(lambda row: _timezones.parse_tz(row['cz_timezone']).localize(row['end_date_time']),
                                    axis=1)
     return df
+
+
+def _assert_frame_eq_ignoring_index_and_dtypes(df1, df2):
+    df1.reset_index(drop=True, inplace=True)
+    df2.reset_index(drop=True, inplace=True)
+    assert_frame_equal(df1, df2, check_dtype=False)
