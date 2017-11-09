@@ -62,8 +62,14 @@ def test_convert_timestamp_tz():
                                     original_tz, target_tz) == pd.Timestamp('2017-01-01 06:00', tz='GMT')
 
 
-@mock.patch('wxdata._timezones.tz_for_latlon', return_value=pytz.timezone('Etc/GMT+5'))
+@mock.patch('wxdata._timezones.tz_for_latlon')
 def test_convert_df_timezone(latlontz):
+    def handle_latlon_tz(lat, lon):
+        if lat is None or lon is None:
+            return None
+        return pytz.timezone('Etc/GMT+5')
+
+    latlontz.side_effect = handle_latlon_tz
     src_df = stormevents.load_file(resource_path('stormevents_mixed_tzs.csv'))
     src_df = src_df[['begin_yearmonth', 'begin_day', 'begin_time', 'end_yearmonth',
                      'end_day', 'end_time', 'state', 'year', 'month_name', 'event_type',

@@ -173,12 +173,12 @@ def convert_row_tz(row, col, to_tz):
         # moving on now...
         return convert_timestamp_tz(row[col], row['cz_timezone'], to_tz)
     except ValueError as e:
-        warnings.warn("Encountered an error while converting time zone, {}. "
-                      "\nAttempting to use location data to determine tz".format(repr(e)))
+        # warnings.warn("Encountered an error while converting time zone, {}. "
+        #               "\nAttempting to use location data to determine tz".format(repr(e)))
         try:
             tz = _tzhelp.tz_for_state(row.state)
             if tz:
-                return tz.localize(row[col]).tz_convert(to_tz)
+                return tz.localize(row[col]).tz_convert(_pdtz_from_str(to_tz))
             else:
                 lat, lon = row['begin_lat'], row['begin_lon']
                 tz = _tzhelp.tz_for_latlon(lat, lon)
@@ -190,7 +190,9 @@ def convert_row_tz(row, col, to_tz):
                     return convert_timestamp_tz(row[col], 'Etc/GMT+{}'.format(-hour_offset), to_tz)
                 else:
                     return convert_timestamp_tz(row[col], 'Etc/GMT-{}'.format(hour_offset), to_tz)
-        except KeyError:
+        except KeyError as innere:
+            # FIXME: KeyError is a superclass of UnknownTimeZoneError... wtf!!! Somehow handle this.
+            print(repr(innere))
             warnings.warn("Can't find timezone with missing lat lon or state data.")
 
         raise e
