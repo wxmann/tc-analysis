@@ -1,3 +1,5 @@
+from __future__ import division
+
 import re
 import warnings
 from datetime import datetime
@@ -132,30 +134,7 @@ def convert_df_tz(df, to_tz='CST', copy=True):
         if col in df.columns:
             df[col] = df.apply(lambda row: convert_row_tz(row, col, to_tz), axis=1)
 
-    for flag, temporal_accessor in product(('begin', 'end'), ('yearmonth', 'time', 'day')):
-        col = '{}_{}'.format(flag, temporal_accessor)
-        src = '{}_date_time'.format(flag)
-
-        if col in df.columns and src in df.columns:
-            def get_val(row):
-                if temporal_accessor == 'yearmonth':
-                    return row[src].strftime('%Y%m')
-                elif temporal_accessor == 'time':
-                    return row[src].strftime('%H%M')
-                elif temporal_accessor == 'day':
-                    return row[src].day
-                else:
-                    raise ValueError("This should not happen -- location: convert DF timezone")
-
-            df[col] = df.apply(get_val, axis=1)
-
-    if 'month_name' in df.columns:
-        df['month_name'] = df.apply(lambda row: row['begin_date_time'].strftime('%B'), axis=1)
-    if 'year' in df.columns:
-        df['year'] = df.apply(lambda row: row['begin_date_time'].year, axis=1)
-
-    df['cz_timezone'] = to_tz
-    return df
+    return _sync_datetime_fields(df, to_tz)
 
 
 def convert_row_tz(row, col, to_tz):
@@ -221,6 +200,96 @@ def _pdtz_from_str(tz_str):
 
     # we're safe; fallback to our usual timezone parsing logic
     return _tzhelp.parse_tz(tz_str)
+
+
+### TIME CORRECTIONS ###
+
+
+_ONE_DAY = pd.Timedelta(days=1)
+_ONE_HOUR = pd.Timedelta(hours=1)
+_TORNADO_LONVEVITY_LIMIT = pd.Timedelta(hours=4)
+
+
+def correct_tornado_times(df, copy=True):
+    if copy:
+        df = df.copy()
+    df[['begin_date_time', 'end_date_time']] = df.apply(correct_times_for, axis=1)
+    return _sync_datetime_fields(df)
+
+
+def correct_times_for(torn):
+    end_date_time = torn['end_date_time']
+    begin_date_time = torn['begin_date_time']
+    torlen = torn['tor_length']
+
+    def _correct_only_end(begin, end):
+        elapsed = end - begin
+
+        if elapsed >= _TORNADO_LONVEVITY_LIMIT:
+            # the longest-lived tornado as of 2017 is the tri-state tornado (3.5 hr)
+            # anything greater than 4 is certainly suspicious.
+            if torlen < 0.3:
+                # short-lived tornado, we assume brief touchdown
+                return begin
+            elif end >= begin + _ONE_DAY:
+                # if possibly not a brief touchdown, assume end-time was entered with wrong day.
+                return elapsed % _ONE_DAY + begin
+            else:
+                # fall back to brief touchdown if no other information
+                return begin
+        elif elapsed >= _ONE_HOUR:
+            mph = torlen / (elapsed.seconds / 3600)
+            # assume off-by-one error in hour if tornado is moving erroneously slowly
+            if mph < 8:
+                hours = elapsed.seconds // 3600
+                return elapsed % _ONE_HOUR + pd.Timedelta(hours - 1) + begin
+        # don't correct
+        return end
+
+    if end_date_time >= begin_date_time:
+        result_begin, result_end = begin_date_time, _correct_only_end(begin_date_time, end_date_time)
+    else:
+        elapsed_rev = begin_date_time - end_date_time
+        if elapsed_rev < _TORNADO_LONVEVITY_LIMIT:
+            # assume times were accidentally swapped in entries
+            new_end_time, new_begin_time = begin_date_time, end_date_time
+            result_begin, result_end = new_begin_time, _correct_only_end(new_begin_time, new_end_time)
+        else:
+            # off-by-one error in date entry
+            result_begin, result_end = begin_date_time, end_date_time + _ONE_DAY
+
+    return pd.Series([result_begin, result_end], index=['begin_date_time', 'end_date_time'])
+
+
+### UTILITIES ###
+
+
+def _sync_datetime_fields(df, tz=None):
+    for flag, temporal_accessor in product(('begin', 'end'), ('yearmonth', 'time', 'day')):
+        col = '{}_{}'.format(flag, temporal_accessor)
+        src = '{}_date_time'.format(flag)
+
+        if col in df.columns and src in df.columns:
+            def get_val(row):
+                if temporal_accessor == 'yearmonth':
+                    return row[src].strftime('%Y%m')
+                elif temporal_accessor == 'time':
+                    return row[src].strftime('%H%M')
+                elif temporal_accessor == 'day':
+                    return row[src].day
+                else:
+                    raise ValueError("This should not happen -- location: convert DF timezone")
+
+            df[col] = df.apply(get_val, axis=1)
+
+    if 'month_name' in df.columns:
+        df['month_name'] = df.apply(lambda row: row['begin_date_time'].strftime('%B'), axis=1)
+    if 'year' in df.columns:
+        df['year'] = df.apply(lambda row: row['begin_date_time'].year, axis=1)
+
+    if tz is not None:
+        df['cz_timezone'] = tz
+    return df
 
 
 def export(df, saveloc, **kwargs):

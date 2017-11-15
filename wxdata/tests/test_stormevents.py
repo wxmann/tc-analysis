@@ -113,6 +113,14 @@ def test_load_multiple_years_storm_data(reqpatch):
     _assert_frame_eq_ignoring_index_and_dtypes(df, df_expected)
 
 
+def test_correct_tornado_times():
+    df = stormevents.load_file(resource_path('stormevents_bad_times.csv'))
+    df = stormevents.correct_tornado_times(df)
+
+    df_expected = stormevents.load_file(resource_path('stormevents_bad_times_corrected.csv'))
+    _assert_frame_eq_ignoring_index_and_dtypes(df, df_expected)
+
+
 def _load_localizing_timezones(file):
     df = stormevents.load_file(file)
     df['begin_date_time'] = df.apply(lambda row: _timezones.parse_tz(row['cz_timezone']).localize(row['begin_date_time']),
