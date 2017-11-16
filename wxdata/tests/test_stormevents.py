@@ -81,6 +81,26 @@ def test_convert_df_timezone(latlontz):
     _assert_frame_eq_ignoring_index_and_dtypes(converted_src_df, expected_df)
 
 
+@mock.patch('wxdata._timezones.tz_for_latlon')
+def test_convert_df_timezone_multiple_times(latlontz):
+    def handle_latlon_tz(lat, lon):
+        if lat is None or lon is None:
+            return None
+        return pytz.timezone('Etc/GMT+5')
+
+    latlontz.side_effect = handle_latlon_tz
+    src_df = stormevents.load_file(resource_path('stormevents_mixed_tzs.csv'))
+    src_df = src_df[['begin_yearmonth', 'begin_day', 'begin_time', 'end_yearmonth',
+                     'end_day', 'end_time', 'state', 'year', 'month_name', 'event_type',
+                     'cz_name', 'cz_timezone', 'begin_date_time', 'end_date_time',
+                     'begin_lat', 'begin_lon', 'episode_narrative', 'event_narrative']]
+
+    expected_df = _load_localizing_timezones(resource_path('stormevents_mixed_tzs_togmt.csv'))
+    intermed = stormevents.convert_df_tz(src_df, 'CST')
+    converted_src_df = stormevents.convert_df_tz(intermed, 'GMT')
+    _assert_frame_eq_ignoring_index_and_dtypes(converted_src_df, expected_df)
+
+
 def test_filter_df_stormtype():
     df = stormevents.load_file(resource_path('stormevents_mixed_tzs.csv'), eventtypes=['Tornado', 'Hail'])
     eventtypes = df[['event_type']]
@@ -88,6 +108,7 @@ def test_filter_df_stormtype():
     assert len(eventtypes) == 13
     assert len(eventtypes[eventtypes.event_type == 'Tornado']) == 12
     assert len(eventtypes[eventtypes.event_type == 'Hail']) == 1
+    assert len(eventtypes[eventtypes.event_type == 'Invalid']) == 0
 
 
 def test_filter_df_state():
@@ -97,6 +118,7 @@ def test_filter_df_state():
     assert len(states) == 4
     assert len(states[states.state == 'HAWAII']) == 3
     assert len(states[states.state == 'COLORADO']) == 1
+    assert len(states[states.state == 'NO']) == 0
 
 
 @mock.patch('wxdata.common.get_links', return_value=(
@@ -113,11 +135,33 @@ def test_load_multiple_years_storm_data(reqpatch):
     _assert_frame_eq_ignoring_index_and_dtypes(df, df_expected)
 
 
+@mock.patch('wxdata.common.get_links', return_value=(
+    'StormEvents_details-ftp_v1.0_d1990_c20170717.csv.gz',
+    'StormEvents_details-ftp_v1.0_d1991_c20170717.csv.gz',
+    'StormEvents_details-ftp_v1.0_d1992_c20170717.csv.gz',
+))
+def test_load_multiple_years_storm_data_localize_to_tz(reqpatch):
+    workdir.setto(resource_path(''))
+    df = stormevents.load_events('1990-01-01', '1992-10-31', eventtypes=['Tornado'],
+                                 states=['Texas', 'Oklahoma', 'Kansas'], tz='EST')
+
+    df_expected = stormevents.load_file(resource_path('multiyear_storm_events_EST_expected.csv'))
+    _assert_frame_eq_ignoring_index_and_dtypes(df, df_expected)
+
+
 def test_correct_tornado_times():
     df = stormevents.load_file(resource_path('stormevents_bad_times.csv'))
     df = stormevents.correct_tornado_times(df)
 
     df_expected = stormevents.load_file(resource_path('stormevents_bad_times_corrected.csv'))
+    _assert_frame_eq_ignoring_index_and_dtypes(df, df_expected)
+
+
+def test_correct_tornado_times_after_tz_conversion():
+    df = stormevents.load_file(resource_path('stormevents_bad_times.csv'), tz='GMT')
+    df = stormevents.correct_tornado_times(df)
+
+    df_expected = stormevents.load_file(resource_path('stormevents_bad_times_GMT_corrected.csv'))
     _assert_frame_eq_ignoring_index_and_dtypes(df, df_expected)
 
 

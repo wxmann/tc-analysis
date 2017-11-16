@@ -258,6 +258,10 @@ def correct_times_for(torn):
             # off-by-one error in date entry
             result_begin, result_end = begin_date_time, end_date_time + _ONE_DAY
 
+    if result_begin.tzinfo is not None or result_end.tzinfo is not None:
+        # workaround for this bug: https://github.com/pandas-dev/pandas/issues/13287
+        result_begin, result_end = result_begin.to_datetime64(), result_end.to_datetime64()
+
     return pd.Series([result_begin, result_end], index=['begin_date_time', 'end_date_time'])
 
 
@@ -278,7 +282,7 @@ def _sync_datetime_fields(df, tz=None):
                 elif temporal_accessor == 'day':
                     return row[src].day
                 else:
-                    raise ValueError("This should not happen -- location: convert DF timezone")
+                    raise ValueError("This should not happen -- location: sync datetime fields")
 
             df[col] = df.apply(get_val, axis=1)
 
