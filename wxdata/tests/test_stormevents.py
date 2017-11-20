@@ -157,7 +157,7 @@ def test_correct_tornado_times():
     _assert_frame_eq_ignoring_index_and_dtypes(df, df_expected)
 
 
-def test_correct_tornado_times_after_tz_conversion():
+def test_after_tz_conversion_correct_tornado_times():
     df = stormevents.load_file(resource_path('stormevents_bad_times.csv'), tz='GMT')
     df = stormevents.correct_tornado_times(df)
 

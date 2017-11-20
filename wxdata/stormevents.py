@@ -6,6 +6,7 @@ from datetime import datetime
 from functools import partial
 from itertools import product
 
+import numpy as np
 import pandas as pd
 import six
 
@@ -42,7 +43,6 @@ def _year_from_link(link):
 
 def load_file(file, keep_data_start=None, keep_data_end=None,
               eventtypes=None, states=None, tz=None):
-
     df = pd.read_csv(file,
                      parse_dates=['BEGIN_DATE_TIME', 'END_DATE_TIME'],
                      infer_datetime_format=True,
@@ -213,14 +213,20 @@ _TORNADO_LONVEVITY_LIMIT = pd.Timedelta(hours=4)
 def correct_tornado_times(df, copy=True):
     if copy:
         df = df.copy()
-    df[['begin_date_time', 'end_date_time']] = df.apply(correct_times_for, axis=1)
+    vals = df[['begin_date_time', 'end_date_time', 'tor_length']].values
+
+    df[['begin_date_time', 'end_date_time']] = np.apply_along_axis(_corrected_times_for, axis=1, arr=vals)
     return _sync_datetime_fields(df)
 
 
-def correct_times_for(torn):
-    end_date_time = torn['end_date_time']
-    begin_date_time = torn['begin_date_time']
-    torlen = torn['tor_length']
+def _corrected_times_for(torn, indices=None):
+    if indices is None:
+        indices = {'begin_date_time': 0, 'end_date_time': 1, 'tor_length': 2}
+
+    assert all(col in indices for col in ('begin_date_time', 'end_date_time', 'tor_length'))
+    end_date_time = torn[indices['end_date_time']]
+    begin_date_time = torn[indices['begin_date_time']]
+    torlen = torn[indices['tor_length']]
 
     def _correct_only_end(begin, end):
         elapsed = end - begin
@@ -258,41 +264,42 @@ def correct_times_for(torn):
             # off-by-one error in date entry
             result_begin, result_end = begin_date_time, end_date_time + _ONE_DAY
 
-    if result_begin.tzinfo is not None or result_end.tzinfo is not None:
-        # workaround for this bug: https://github.com/pandas-dev/pandas/issues/13287
-        result_begin, result_end = result_begin.to_datetime64(), result_end.to_datetime64()
-
-    return pd.Series([result_begin, result_end], index=['begin_date_time', 'end_date_time'])
+    return [result_begin, result_end]
 
 
 ### UTILITIES ###
 
 
 def _sync_datetime_fields(df, tz=None):
-    for flag, temporal_accessor in product(('begin', 'end'), ('yearmonth', 'time', 'day')):
-        col = '{}_{}'.format(flag, temporal_accessor)
-        src = '{}_date_time'.format(flag)
 
-        if col in df.columns and src in df.columns:
-            def get_val(row):
-                if temporal_accessor == 'yearmonth':
-                    return row[src].strftime('%Y%m')
-                elif temporal_accessor == 'time':
-                    return row[src].strftime('%H%M')
-                elif temporal_accessor == 'day':
-                    return row[src].day
-                else:
-                    raise ValueError("This should not happen -- location: sync datetime fields")
+    def _extract(prefix):
+        dt_col = '{}_date_time'.format(prefix)
+        if dt_col in df.columns:
+            dts = df[dt_col].dt
 
-            df[col] = df.apply(get_val, axis=1)
+            yearmonth_col = '{}_yearmonth'.format(prefix)
+            time_col = '{}_time'.format(prefix)
+            day_col = '{}_day'.format(prefix)
 
-    if 'month_name' in df.columns:
-        df['month_name'] = df.apply(lambda row: row['begin_date_time'].strftime('%B'), axis=1)
-    if 'year' in df.columns:
-        df['year'] = df.apply(lambda row: row['begin_date_time'].year, axis=1)
+            if yearmonth_col in df.columns:
+                df[yearmonth_col] = dts.strftime('%Y%m')
+            if time_col in df.columns:
+                df[time_col] = dts.strftime('%H%M')
+            if day_col in df.columns:
+                df[day_col] = dts.day
+
+            if prefix == 'begin' and 'year' in df.columns:
+                df['year'] = dts.year
+
+            if prefix == 'begin' and 'month_name' in df.columns:
+                df['month_name'] = dts.strftime('%B')
+
+    _extract('begin')
+    _extract('end')
 
     if tz is not None:
         df['cz_timezone'] = tz
+
     return df
 
 
