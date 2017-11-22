@@ -2,9 +2,10 @@ import os
 from itertools import product
 from unittest import mock
 
+import numpy as np
 import pandas as pd
 import pytz
-from pandas.util.testing import assert_frame_equal
+from pandas.util.testing import assert_frame_equal, assert_series_equal
 
 from wxdata import stormevents, _timezones, workdir
 from wxdata.stormevents import urls_for, convert_timestamp_tz
@@ -151,7 +152,7 @@ def test_load_multiple_years_storm_data_localize_to_tz(reqpatch):
 
 def test_correct_tornado_times():
     df = stormevents.load_file(resource_path('stormevents_bad_times.csv'))
-    df = stormevents.correct_tornado_times(df)
+    df = stormevents.tors.correct_tornado_times(df)
 
     df_expected = stormevents.load_file(resource_path('stormevents_bad_times_corrected.csv'))
     _assert_frame_eq_ignoring_index_and_dtypes(df, df_expected)
@@ -159,10 +160,52 @@ def test_correct_tornado_times():
 
 def test_after_tz_conversion_correct_tornado_times():
     df = stormevents.load_file(resource_path('stormevents_bad_times.csv'), tz='GMT')
-    df = stormevents.correct_tornado_times(df)
+    df = stormevents.tors.correct_tornado_times(df)
 
     df_expected = stormevents.load_file(resource_path('stormevents_bad_times_GMT_corrected.csv'))
     _assert_frame_eq_ignoring_index_and_dtypes(df, df_expected)
+
+
+def test_get_longevity():
+    init = pd.Timestamp('1990-01-01 00:00')
+    deltas = [pd.Timedelta(hours=0), pd.Timedelta('00:01:11'), pd.Timedelta(hours=1), pd.Timedelta(minutes=45)]
+    start_times = [init] * len(deltas)
+    end_times = [init + dt for dt in deltas]
+
+    df = pd.DataFrame({'begin_date_time': start_times, 'end_date_time': end_times})
+
+    longevities = stormevents.tors.longevity(df)
+    assert_series_equal(longevities, pd.Series(deltas))
+
+
+def test_get_ef():
+    entries = [f + str(rating) for f, rating in product(['F', 'EF'], range(6))]
+    entries.append(np.nan)
+    entries.append('')
+    entries.append('NaN')
+    entries.append('EFU')
+
+    df = pd.DataFrame({'tor_f_scale': entries})
+
+    efs = stormevents.tors.ef(df)
+
+    expected = [float(f) for f in range(6)] * 2
+    expected += [np.nan] * 4
+    assert_series_equal(efs, pd.Series(expected), check_names=False)
+
+
+def test_get_speed():
+    init = pd.Timestamp('1990-01-01 00:00')
+    deltas = [pd.Timedelta(hours=0), pd.Timedelta(minutes=30), pd.Timedelta(hours=1), pd.Timedelta(hours=2)]
+    start_times = [init] * len(deltas)
+    end_times = [init + dt for dt in deltas]
+    tor_lengths = [10] * len(deltas)
+
+    df = pd.DataFrame({'begin_date_time': start_times, 'end_date_time': end_times,
+                       'tor_length': tor_lengths})
+
+    speeds = stormevents.tors.speed_mph(df)
+    assert_series_equal(speeds, pd.Series([np.nan, 20, 10, 5]))
 
 
 def _load_localizing_timezones(file):
