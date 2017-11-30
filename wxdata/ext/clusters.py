@@ -1,15 +1,19 @@
+import cartopy.crs as ccrs
+import cartopy.feature as cfeat
 import matplotlib.cm as cm
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from shapely.geometry import MultiPoint
 from sklearn.cluster import DBSCAN
 
-from wxdata import map_plotting
-
 
 def temporal_discretize(torn_seg, spacing_min=1):
     elapsed_min = (torn_seg.end_date_time - torn_seg.begin_date_time) / pd.Timedelta('1 min')
     slat, slon, elat, elon = torn_seg.begin_lat, torn_seg.begin_lon, torn_seg.end_lat, torn_seg.end_lon
+
+    if any(np.isnan(pt) for pt in (slat, slon, elat, elon)):
+        return np.empty((2, 4))
 
     numpoints = elapsed_min // spacing_min + 1
     lat_space = np.linspace(slat, elat, numpoints)
@@ -19,7 +23,8 @@ def temporal_discretize(torn_seg, spacing_min=1):
 
 
 def torn_latlons(torndata):
-    tornref = {}
+    tornref = _LatLonKeyMap()
+    paths = []
 
     for _, torn in torndata.iterrows():
         tornpts = temporal_discretize(torn)
@@ -27,12 +32,13 @@ def torn_latlons(torndata):
             if pt not in tornref:
                 tornref[pt] = []
             tornref[pt].append(torn)
+        paths.append(tornpts)
 
-    latlons = np.concatenate(tornref.keys())
+    latlons = np.concatenate(paths)
     return latlons, tornref
 
 
-def spatial_clusters(latlons, weights=None, eps_mi=30, threshold=2.5):
+def dbscan_clusters(latlons, weights=None, eps_mi=30, threshold=2.5):
     kms_per_radian = 6371.0088
     epsilon = eps_mi * 1.609 / kms_per_radian
 
@@ -57,32 +63,56 @@ def centroid(cluster):
     return ctr.x, ctr.y
 
 
-def plot_clusters(clusters, outliers, cluster_colors=None, mapper=None):
-    if mapper is None:
-        mapper = map_plotting.get_map()
-    if cluster_colors is None:
-        cluster_colors = cm.rainbow(np.linspace(0, 1, len(clusters)))
-    elif len(cluster_colors) != len(clusters):
-        raise ValueError("Size of cluster colors != size of clusters")
+class _LatLonKeyMap(object):
+    def __init__(self):
+        self._entries = {}
 
-    for cluster, color in zip(clusters, cluster_colors):
+    def __contains__(self, latlon):
+        return latlon.tostring() in self._entries
+
+    def __setitem__(self, latlon, index):
+        self._entries[latlon.tostring()] = index
+
+    def __getitem__(self, latlon):
+        return self._entries[latlon.tostring()]
+
+
+def plot_clusters(clusts, outliers, tornref, outline):
+    fig = plt.figure(figsize=(16, 16), dpi=80)
+    proj = ccrs.PlateCarree()
+    ax = plt.axes(projection=proj)
+
+    # Southern Plains
+    # ax.set_extent((-107.5, -91, 27.5, 39.5))
+
+    #     Central Plains
+    #     ax.set_extent((-107.5, -91, 33.5, 44))
+
+    # southeast
+    #     ax.set_extent((-98, -74, 23, 40))
+
+    ax.set_extent(outline)
+
+    ax.coastlines()
+    states = cfeat.NaturalEarthFeature(category='cultural', name='admin_1_states_provinces_lakes',
+                                       scale='50m', facecolor='none')
+    ax.add_feature(states, edgecolor='black', linewidth=1.0)
+
+    colors = cm.rainbow(np.linspace(0, 1, len(clusts)))
+
+    for cluster, color in zip(clusts, colors):
+        ctrlon, ctrlat = centroid(cluster)
+        ax.plot(ctrlat, ctrlon, 'o', markersize=30, transform=ccrs.Geodetic(), color=color, alpha=0.3)
         for pt in cluster:
-            lat, lon = reversed(pt)
-            map_plotting.plot_point(mapper, lat, lon, 'o', markersize=2, color=color)
+            if pt in tornref:
+                ax.plot(pt[1], pt[0], 'o', markersize=3, transform=ccrs.Geodetic(), color=color)
+            else:
+                ax.plot(pt[1], pt[0], '+', markersize=2, transform=ccrs.Geodetic(), color=color)
 
     for pt in outliers:
-        lat, lon = reversed(pt)
-        map_plotting.plot_point(mapper, lat, lon, '+', markersize=2, color='gray')
+        if pt in tornref:
+            ax.plot(pt[1], pt[0], 'o', markersize=3, transform=ccrs.Geodetic(), color='gray')
+        else:
+            ax.plot(pt[1], pt[0], '+', markersize=2, transform=ccrs.Geodetic(), color='gray')
 
-
-def plot_centroids(clusters, cluster_colors=None, mapper=None):
-    if mapper is None:
-        mapper = map_plotting.get_map()
-    if cluster_colors is None:
-        cluster_colors = cm.rainbow(np.linspace(0, 1, len(clusters)))
-    elif len(cluster_colors) != len(clusters):
-        raise ValueError("Size of cluster colors != size of clusters")
-
-    for cluster, color in zip(clusters, cluster_colors):
-        ctrlon, ctrlat = centroid(cluster)
-        map_plotting.plot_point(mapper, ctrlat, ctrlon, 'o', markersize=30, color=color, alpha=0.3)
+    return fig

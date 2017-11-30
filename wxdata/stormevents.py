@@ -206,9 +206,10 @@ def _pdtz_from_str(tz_str):
 ### TORNADOES ###
 
 
-class _TornDataProcess(object):
+class _Torn(object):
     _ONE_DAY = pd.Timedelta(days=1)
     _ONE_HOUR = pd.Timedelta(hours=1)
+    _ONE_MINUTE = pd.Timedelta(minutes=1)
     _TORNADO_LONVEVITY_LIMIT = pd.Timedelta(hours=4)
 
     def __init__(self):
@@ -228,8 +229,9 @@ class _TornDataProcess(object):
         if floor_longevity is None:
             floor_longevity = pd.Timedelta(seconds=30)
 
-        longevities = _TornDataProcess.longevity(df)
+        longevities = _Torn.longevity(df)
         longevities[longevities < floor_longevity] = np.nan
+        longevities = pd.to_timedelta(longevities)
         longevities /= pd.Timedelta('1 hour')
         path_lens = df['tor_length']
 
@@ -241,7 +243,7 @@ class _TornDataProcess(object):
             df = df.copy()
         vals = df[['event_type', 'begin_date_time', 'end_date_time', 'tor_length']].values
 
-        df[['begin_date_time', 'end_date_time']] = np.apply_along_axis(_TornDataProcess._corrected_times_for,
+        df[['begin_date_time', 'end_date_time']] = np.apply_along_axis(_Torn._corrected_times_for,
                                                                        axis=1, arr=vals)
         return _sync_datetime_fields(df)
 
@@ -263,24 +265,24 @@ class _TornDataProcess(object):
         def _correct_only_end(begin, end):
             elapsed = end - begin
 
-            if elapsed >= _TornDataProcess._TORNADO_LONVEVITY_LIMIT:
+            if elapsed >= _Torn._TORNADO_LONVEVITY_LIMIT:
                 # the longest-lived tornado as of 2017 is the tri-state tornado (3.5 hr)
                 # anything greater than 4 is certainly suspicious.
                 if torlen < 0.3:
                     # short-lived tornado, we assume brief touchdown
                     return begin
-                elif end >= begin + _TornDataProcess._ONE_DAY:
+                elif end >= begin + _Torn._ONE_DAY:
                     # if possibly not a brief touchdown, assume end-time was entered with wrong day.
-                    return elapsed % _TornDataProcess._ONE_DAY + begin
+                    return elapsed % _Torn._ONE_DAY + begin
                 else:
                     # fall back to brief touchdown if no other information
                     return begin
-            elif elapsed >= _TornDataProcess._ONE_HOUR:
+            elif elapsed >= _Torn._ONE_HOUR:
                 mph = torlen / (elapsed.seconds / 3600)
                 # assume off-by-one error in hour if tornado is moving erroneously slowly
                 if mph < 8:
                     hours = elapsed.seconds // 3600
-                    return elapsed % _TornDataProcess._ONE_HOUR + pd.Timedelta(hours - 1) + begin
+                    return elapsed % _Torn._ONE_HOUR + pd.Timedelta(hours - 1) + begin
             # don't correct
             return end
 
@@ -288,18 +290,33 @@ class _TornDataProcess(object):
             result_begin, result_end = begin_date_time, _correct_only_end(begin_date_time, end_date_time)
         else:
             elapsed_rev = begin_date_time - end_date_time
-            if elapsed_rev < _TornDataProcess._TORNADO_LONVEVITY_LIMIT:
+            if elapsed_rev < _Torn._TORNADO_LONVEVITY_LIMIT:
                 # assume times were accidentally swapped in entries
                 new_end_time, new_begin_time = begin_date_time, end_date_time
                 result_begin, result_end = new_begin_time, _correct_only_end(new_begin_time, new_end_time)
             else:
                 # off-by-one error in date entry
-                result_begin, result_end = begin_date_time, end_date_time + _TornDataProcess._ONE_DAY
+                result_begin, result_end = begin_date_time, end_date_time + _Torn._ONE_DAY
 
         return [result_begin, result_end]
 
+    @staticmethod
+    def points(torn, delta=None):
+        if delta is None:
+            delta = _Torn._ONE_MINUTE
 
-tors = _TornDataProcess()
+        elapsed_min = _Torn.longevity(torn) / _Torn._ONE_MINUTE
+        spacing_min = delta / _Torn._ONE_MINUTE
+        slat, slon, elat, elon = torn.begin_lat, torn.begin_lon, torn.end_lat, torn.end_lon
+
+        numpoints = elapsed_min // spacing_min + 1
+        lat_space = np.linspace(slat, elat, numpoints)
+        lon_space = np.linspace(slon, elon, numpoints)
+
+        return np.vstack([lat_space, lon_space]).T
+
+
+tors = _Torn()
 
 
 ### UTILITIES ###
