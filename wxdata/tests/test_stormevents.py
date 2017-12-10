@@ -208,6 +208,52 @@ def test_get_speed():
     assert_series_equal(speeds, pd.Series([np.nan, 20, 10, 5]))
 
 
+def test_discretize_tor():
+    numpts_1 = 11
+    t0_1 = pd.Timestamp('2017-01-01 00:00-06:00')
+    tor1 = {
+        'begin_date_time': t0_1,
+        'end_date_time': t0_1 + pd.Timedelta(minutes=numpts_1 - 1),
+        'begin_lat': 10.00,
+        'begin_lon': -100.00,
+        'end_lat': 15.00,
+        'end_lon': -90.00,
+        'cz_timezone': 'CST',
+        'event_id': 1
+    }
+
+    numpts_2 = 6
+    t0_2 = pd.Timestamp('2017-01-08 00:00')
+    tor2 = {
+        'begin_date_time': t0_2,
+        'end_date_time': t0_2 + pd.Timedelta(minutes=numpts_2 - 1),
+        'begin_lat': 50.00,
+        'begin_lon': -100.00,
+        'end_lat': 51.00,
+        'end_lon': -110.00,
+        'cz_timezone': 'CST',
+        'event_id': 1
+    }
+
+    df = pd.DataFrame({0: tor1, 1: tor2}).transpose()
+
+    points = stormevents.tors.discretize(df)
+
+    assert points.shape[0] == numpts_1 + numpts_2
+
+    for i in range(0, numpts_1):
+        pt = points.loc[i]
+        assert pt['timestamp'] == tor1['begin_date_time'] + pd.Timedelta(minutes=i)
+        assert pt['lat'] == tor1['begin_lat'] + 0.5 * i
+        assert pt['lon'] == tor1['begin_lon'] + 1 * i
+
+    for i in range(0, numpts_2):
+        pt = points.loc[numpts_1 + i]
+        assert pt['timestamp'] == (tor2['begin_date_time'] + pd.Timedelta(minutes=i)).tz_localize('Etc/GMT+6')
+        assert pt['lat'] == tor2['begin_lat'] + 0.2 * i
+        assert pt['lon'] == tor2['begin_lon'] - 2 * i
+
+
 def _load_localizing_timezones(file):
     df = stormevents.load_file(file)
     df['begin_date_time'] = df.apply(lambda row: _timezones.parse_tz(row['cz_timezone']).localize(row['begin_date_time']),

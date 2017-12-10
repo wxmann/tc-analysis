@@ -89,8 +89,7 @@ def _pdtz_from_str(tz_str):
 
 
 def sync_datetime_fields(df, tz=None):
-
-    def _extract(prefix):
+    for prefix in ('begin', 'end'):
         dt_col = '{}_date_time'.format(prefix)
         if dt_col in df.columns:
             dts = df[dt_col].dt
@@ -111,9 +110,6 @@ def sync_datetime_fields(df, tz=None):
 
             if prefix == 'begin' and 'month_name' in df.columns:
                 df['month_name'] = dts.strftime('%B')
-
-    _extract('begin')
-    _extract('end')
 
     if tz is not None:
         df['cz_timezone'] = tz
