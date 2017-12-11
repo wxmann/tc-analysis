@@ -10,6 +10,7 @@ import pandas as pd
 from wxdata.common import get_links, DataRetrievalException
 from wxdata.stormevents.temporal import convert_df_tz
 from wxdata.workdir import bulksave
+from wxdata import _timezones as _tz
 
 __all__ = ['load_file', 'load_events', 'load_events_year', 'export',
            'tornadoes', 'hail', 'all_severe', 'tstorm_wind', 'urls_for']
@@ -53,7 +54,7 @@ def load_file(file, keep_data_start=None, keep_data_end=None,
                      },
                      dtype={'{}_{}'.format(flag, temporal_accessor): object
                             for flag, temporal_accessor
-                            in product(('BEGIN', 'END'), ('YEARMONTH', 'TIME'))},
+                            in product(('BEGIN', 'END'), ('YEARMONTH',))},
                      compression='infer')
 
     df.columns = map(str.lower, df.columns)
@@ -66,6 +67,10 @@ def load_file(file, keep_data_start=None, keep_data_end=None,
     if tz:
         df = convert_df_tz(df, tz, False)
     if keep_data_start and keep_data_end:
+        if tz:
+            keep_data_start = keep_data_start.tz_localize(_tz.parse_tz(tz))
+            keep_data_end = keep_data_end.tz_localize(_tz.parse_tz(tz))
+
         df = df[(df.begin_date_time >= keep_data_start) & (df.begin_date_time < keep_data_end)]
 
     return df
@@ -76,6 +81,10 @@ def load_events(start, end, eventtypes=None, states=None, tz=None, debug=False):
         start = pd.Timestamp(start)
     if isinstance(end, six.string_types):
         end = pd.Timestamp(end)
+
+    if tz is not None:
+        start = start.tz_localize(_tz.parse_tz(tz))
+        end = end.tz_localize(_tz.parse_tz(tz))
 
     if end < start:
         raise ValueError("End date must be on or after start date")
