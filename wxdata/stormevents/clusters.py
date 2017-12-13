@@ -2,49 +2,58 @@ import numpy as np
 import pandas as pd
 from pandas.core.common import SettingWithCopyWarning
 from sklearn.cluster import DBSCAN
-from sklearn.metrics import pairwise_distances
 
 import itertools
 import warnings
 
 
 def spatial_clusters(df, eps_km, min_samples):
+    assert min_samples > 0
     kms_per_radian = 6371.0088
-    dbscan_spatial = DBSCAN(eps=eps_km / kms_per_radian, metric='haversine', min_samples=min_samples)
+    dbscan_spatial = DBSCAN(eps=eps_km / kms_per_radian, metric='haversine',
+                            algorithm='ball_tree', min_samples=min_samples)
     dataset_spatial = np.radians(df[['lat', 'lon']])
-    return dbscan_spatial.fit(dataset_spatial)
+    return dbscan_spatial.fit_predict(dataset_spatial)
 
 
 def temporal_clusters(df, eps_min, min_samples):
+    assert min_samples > 0
     nanos_per_min = 10 ** 9 * 60
-    dbscan_temporal = DBSCAN(eps=eps_min * nanos_per_min, metric='precomputed', min_samples=min_samples)
-    times_nano = df['timestamp'].astype(np.int64).values.reshape(-1, 1)
-    dataset_temporal = pairwise_distances(times_nano, metric=lambda x, y: abs(x - y))
-    return dbscan_temporal.fit(dataset_temporal)
+    dbscan_temporal = DBSCAN(eps=eps_min * nanos_per_min, metric='euclidean',
+                             min_samples=min_samples)
+    dataset_temporal = df['timestamp'].astype(np.int64).values.reshape(-1, 1)
+    return dbscan_temporal.fit_predict(dataset_temporal)
 
 
-def st_clusters(df, eps_km, eps_min, min_samples, show_components=False):
+def _intermed_st_clusters(clust, eps_km, eps_min):
+    clust['spatial'] = spatial_clusters(clust, eps_km, 1)
+    clust['temporal'] = temporal_clusters(clust, eps_min, 1)
+    return clust.groupby(['spatial', 'temporal'])
+
+
+def st_clusters(df, eps_km, eps_min, min_samples):
+    assert min_samples > 0
     label_gen = itertools.count()
+    pieces = []
 
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=SettingWithCopyWarning)
 
-        with_spatial = df.copy()
-        with_spatial['spatial'] = spatial_clusters(df, eps_km, min_samples).labels_
+        def extract_clusts(data):
+            clusts = _intermed_st_clusters(data, eps_km, eps_min)
+            if len(clusts) == 1:
+                _, clust = next(iter(clusts))
+                clust.drop(['spatial', 'temporal'], axis=1, inplace=True)
 
-        result_pieces = []
-        for clust_label, clust in with_spatial.groupby('spatial'):
-            clust['temporal'] = temporal_clusters(clust, eps_min, min_samples).labels_
-
-            for indices, group in clust.groupby(['spatial', 'temporal']):
-                if any(index < 0 for index in indices):
-                    group['cluster'] = -1
+                if clust.shape[0] < min_samples:
+                    clust['cluster'] = -1
                 else:
-                    group['cluster'] = next(label_gen)
-                result_pieces.append(group)
+                    clust['cluster'] = next(label_gen)
+                pieces.append(clust)
+            else:
+                for _, clust in clusts:
+                    extract_clusts(clust)
 
-    ret = pd.concat(result_pieces, ignore_index=True)
-    if not show_components:
-        ret.drop(['spatial', 'temporal'], axis=1, inplace=True)
+        extract_clusts(df.copy())
 
-    return ret
+    return pd.concat(pieces, ignore_index=True)
