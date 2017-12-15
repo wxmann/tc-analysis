@@ -106,7 +106,7 @@ venv.bak/
 # INTELLIJ
 .idea/
 
-*.ipynb
+# *.ipynb
 # !projects/*.ipynb
 runner.py
 
