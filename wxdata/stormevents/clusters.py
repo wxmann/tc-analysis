@@ -8,6 +8,8 @@ import warnings
 
 from wxdata.stormevents.tornprocessing import discretize, ef, longevity
 
+_NOISE_LABEL = -1
+
 
 def spatial_clusters(points, eps_km, min_samples):
     assert min_samples > 0
@@ -27,9 +29,9 @@ def temporal_clusters(points, eps_min, min_samples):
     return dbscan_temporal.fit_predict(dataset_temporal)
 
 
-def _intermed_st_clusters(data, eps_km, eps_min):
-    data['spatial'] = spatial_clusters(data, eps_km, 1)
-    data['temporal'] = temporal_clusters(data, eps_min, 1)
+def _intermed_st_clusters(data, eps_km, eps_min, min_samples):
+    data['spatial'] = spatial_clusters(data, eps_km, min_samples)
+    data['temporal'] = temporal_clusters(data, eps_min, min_samples)
     return data.groupby(['spatial', 'temporal'])
 
 
@@ -45,26 +47,31 @@ def st_clusters(events, eps_km, eps_min, min_samples):
         warnings.filterwarnings('ignore', category=SettingWithCopyWarning)
 
         def extract_clusts(data):
-            clusts = _intermed_st_clusters(data, eps_km, eps_min)
+            clusts = _intermed_st_clusters(data, eps_km, eps_min, min_samples)
             if len(clusts) == 1:
-                _, clust = next(iter(clusts))
+                indices, clust = next(iter(clusts))
                 clust.drop(['spatial', 'temporal'], axis=1, inplace=True)
 
-                if clust.shape[0] < min_samples:
-                    clust['cluster'] = -1
+                if _NOISE_LABEL in indices:
+                    clust['cluster'] = _NOISE_LABEL
                     noises.append(clust)
                 else:
                     label = next(label_gen)
                     clust['cluster'] = label
                     result_clusts.append(Cluster(label, clust, events))
             else:
-                for _, clust in clusts:
-                    extract_clusts(clust)
+                for indices, clust in clusts:
+                    if _NOISE_LABEL in indices:
+                        clust.drop(['spatial', 'temporal'], axis=1, inplace=True)
+                        clust['cluster'] = _NOISE_LABEL
+                        noises.append(clust)
+                    else:
+                        extract_clusts(clust)
 
         extract_clusts(points)
 
     noise_pts = pd.concat(noises, ignore_index=True)
-    return result_clusts, Cluster(-1, noise_pts, events)
+    return result_clusts, Cluster(_NOISE_LABEL, noise_pts, events)
 
 
 class Cluster(object):
@@ -102,7 +109,7 @@ class Cluster(object):
 
     @property
     def end_time(self):
-        return self._points.timestamp.max()
+        return self._points.timestamp.max() + pd.Timedelta('1 min')
 
     def __len__(self):
         return len(self._points)
@@ -131,5 +138,7 @@ class Cluster(object):
         return ret
 
     def plot(self, basemap, markersize=2, color=None, **kwargs):
-        for _, pt in self._points.iterrows():
-            basemap.plot(pt.lon, pt.lat, 'o', markersize=markersize, color=color, **kwargs)
+        lons = self.latlons[:, 1]
+        lats = self.latlons[:, 0]
+        x, y = basemap(lons, lats)
+        basemap.plot(x, y, 'o', markersize=markersize, color=color, **kwargs)
