@@ -17,8 +17,13 @@ def get():
     workdir = os.getenv(VAR)
     if not workdir:
         raise WorkDirectoryException('Work directory must be set!')
+
+    if workdir[0] == '~':
+        workdir = os.path.expanduser(workdir)
+
     if not os.path.isdir(workdir):
         raise WorkDirectoryException('Work directory must be a valid directory!')
+
     return workdir
 
 
