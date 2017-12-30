@@ -1,3 +1,5 @@
+from functools import partial
+
 import numpy as np
 import pandas as pd
 from geopy.distance import great_circle
@@ -14,15 +16,12 @@ def st_clusters(events, eps_km, eps_min, min_samples, algorithm=None):
     if algorithm == 'brute':
         return _brute_st_clusters(events, eps_km, eps_min, min_samples)
 
-    def eff_distance(pt1, pt2):
-        nanos_per_min = 10 ** 9 * 60
-        km = great_circle((pt1[0], pt1[1]), (pt2[0], pt2[1])).km
-        dt = abs(pt1[2] - pt2[2])
-        return km > eps_km or dt > eps_min * nanos_per_min
-
     points = discretize(events)
     points['timestamp_nanos'] = points.timestamp.astype(np.int64)
-    similarity = pairwise_distances(points[['lat', 'lon', 'timestamp_nanos']], metric=eff_distance)
+    n_jobs = 1 if len(points) < 100 else -1
+    similarity = pairwise_distances(points[['lat', 'lon', 'timestamp_nanos']],
+                                    metric=partial(_binary_distance, eps_km=eps_km, eps_min=eps_min),
+                                    n_jobs=n_jobs)
 
     db = DBSCAN(eps=0.5, metric='precomputed', min_samples=min_samples)
     cluster_labels = db.fit_predict(similarity)
@@ -33,6 +32,12 @@ def st_clusters(events, eps_km, eps_min, min_samples, algorithm=None):
     clusts = {label: Cluster(label, points[points.cluster == label], events)
               for label in points.cluster.unique()}
     return clusts
+
+
+def _binary_distance(pt1, pt2, eps_km, eps_min):
+    nanos_per_min = 10 ** 9 * 60
+    return abs(pt1[2] - pt2[2]) > eps_min * nanos_per_min or \
+           great_circle((pt1[0], pt1[1]), (pt2[0], pt2[1])).km > eps_km
 
 
 def _brute_st_clusters(events, eps_km, eps_min, min_samples):
@@ -91,7 +96,6 @@ def _brute_st_clusters(events, eps_km, eps_min, min_samples):
 
 
 def _neighbors(df, spatial_dist, temporal_dist, index):
-    from geopy.distance import great_circle
     pt = df.loc[index]
     tmin = pt.timestamp - pd.Timedelta(minutes=temporal_dist)
     tmax = pt.timestamp + pd.Timedelta(minutes=temporal_dist)
