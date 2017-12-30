@@ -1,77 +1,104 @@
 import numpy as np
 import pandas as pd
-from pandas.core.common import SettingWithCopyWarning
+from geopy.distance import great_circle
 from sklearn.cluster import DBSCAN
-
-import itertools
-import warnings
+from sklearn.metrics import pairwise_distances
 
 from wxdata.stormevents.tornprocessing import discretize, ef, longevity
 
-_NOISE_LABEL = -1
+NOISE_LABEL = -1
 
 
-def spatial_clusters(points, eps_km, min_samples):
+def st_clusters(events, eps_km, eps_min, min_samples, algorithm=None):
     assert min_samples > 0
-    kms_per_radian = 6371.0088
-    dbscan_spatial = DBSCAN(eps=eps_km / kms_per_radian, metric='haversine',
-                            algorithm='ball_tree', min_samples=min_samples)
-    dataset_spatial = np.radians(points[['lat', 'lon']])
-    return dbscan_spatial.fit_predict(dataset_spatial)
+    if algorithm == 'brute':
+        return _brute_st_clusters(events, eps_km, eps_min, min_samples)
 
+    def eff_distance(pt1, pt2):
+        nanos_per_min = 10 ** 9 * 60
+        km = great_circle((pt1[0], pt1[1]), (pt2[0], pt2[1])).km
+        dt = abs(pt1[2] - pt2[2])
+        return km > eps_km or dt > eps_min * nanos_per_min
 
-def temporal_clusters(points, eps_min, min_samples):
-    assert min_samples > 0
-    nanos_per_min = 10 ** 9 * 60
-    dbscan_temporal = DBSCAN(eps=eps_min * nanos_per_min, metric='euclidean',
-                             min_samples=min_samples)
-    dataset_temporal = points['timestamp'].astype(np.int64).values.reshape(-1, 1)
-    return dbscan_temporal.fit_predict(dataset_temporal)
-
-
-def _intermed_st_clusters(data, eps_km, eps_min, min_samples):
-    data['spatial'] = spatial_clusters(data, eps_km, min_samples)
-    data['temporal'] = temporal_clusters(data, eps_min, min_samples)
-    return data.groupby(['spatial', 'temporal'])
-
-
-def st_clusters(events, eps_km, eps_min, min_samples):
-    assert min_samples > 0
     points = discretize(events)
+    points['timestamp_nanos'] = points.timestamp.astype(np.int64)
+    similarity = pairwise_distances(points[['lat', 'lon', 'timestamp_nanos']], metric=eff_distance)
 
-    label_gen = itertools.count()
-    noises = []
-    result_clusts = []
+    db = DBSCAN(eps=0.5, metric='precomputed', min_samples=min_samples)
+    cluster_labels = db.fit_predict(similarity)
 
-    with warnings.catch_warnings():
-        warnings.filterwarnings('ignore', category=SettingWithCopyWarning)
+    points.drop('timestamp_nanos', axis=1, inplace=True)
+    points['cluster'] = cluster_labels
 
-        def extract_clusts(data):
-            clusts = _intermed_st_clusters(data, eps_km, eps_min, min_samples)
-            if len(clusts) == 1:
-                indices, clust = next(iter(clusts))
-                clust.drop(['spatial', 'temporal'], axis=1, inplace=True)
+    clusts = {label: Cluster(label, points[points.cluster == label], events)
+              for label in points.cluster.unique()}
+    return clusts
 
-                if _NOISE_LABEL in indices:
-                    clust['cluster'] = _NOISE_LABEL
-                    noises.append(clust)
-                else:
-                    label = next(label_gen)
-                    clust['cluster'] = label
-                    result_clusts.append(Cluster(label, clust, events))
-            else:
-                for indices, clust in clusts:
-                    if _NOISE_LABEL in indices:
-                        clust.drop(['spatial', 'temporal'], axis=1, inplace=True)
-                        clust['cluster'] = _NOISE_LABEL
-                        noises.append(clust)
-                    else:
-                        extract_clusts(clust)
 
-        extract_clusts(points)
+def _brute_st_clusters(events, eps_km, eps_min, min_samples):
+    points = discretize(events)
+    noise = NOISE_LABEL
+    undetermined = -999
 
-    noise_pts = pd.concat(noises, ignore_index=True)
-    return result_clusts, Cluster(_NOISE_LABEL, noise_pts, events)
+    label = 0
+    points['cluster'] = undetermined
+    neighb_threshold = min_samples - 1
+    clusterpts = set()
+    noisepts = set()
+
+    def is_noise(group, threshold):
+        return group.shape[0] < threshold
+
+    for index in points.index:
+        if index in clusterpts or index in noisepts:
+            continue
+
+        neighb = _neighbors(points, eps_km, eps_min, index)
+        if is_noise(neighb, neighb_threshold):
+            points.set_value(index, 'cluster', noise)
+            noisepts.add(index)
+        else:
+            label += 1
+            points.set_value(index, 'cluster', label)
+            clusterpts.add(index)
+            subpts = {i for i in neighb.index if i not in clusterpts}
+
+            while subpts:
+                qindex = subpts.pop()
+                if qindex in noisepts:
+                    points.set_value(qindex, 'cluster', label)
+                    noisepts.remove(qindex)
+                    clusterpts.add(qindex)
+
+                if qindex in clusterpts:
+                    continue
+
+                points.set_value(qindex, 'cluster', label)
+                clusterpts.add(qindex)
+                neighb_inner = _neighbors(points, eps_km, eps_min, qindex)
+
+                if not is_noise(neighb_inner, neighb_threshold):
+                    subpts = subpts.union({i for i in neighb_inner.index if i not in clusterpts})
+
+    clusters = {}
+    for clust_label in points.cluster.unique():
+        clust_points = points[points.cluster == clust_label]
+        clusters[clust_label] = Cluster(clust_label, clust_points, events)
+
+    noise_points = points[points.cluster == noise]
+    clusters[noise] = Cluster(noise, noise_points, events)
+    return clusters
+
+
+def _neighbors(df, spatial_dist, temporal_dist, index):
+    from geopy.distance import great_circle
+    pt = df.loc[index]
+    tmin = pt.timestamp - pd.Timedelta(minutes=temporal_dist)
+    tmax = pt.timestamp + pd.Timedelta(minutes=temporal_dist)
+
+    filtered = df[(df.timestamp >= tmin) & (df.timestamp <= tmax)]
+    mask = filtered.apply(lambda r: great_circle((r.lat, r.lon), (pt.lat, pt.lon)).km, axis=1) < spatial_dist
+    return filtered[mask & (filtered.index != pt.name)]
 
 
 class Cluster(object):
@@ -142,3 +169,10 @@ class Cluster(object):
         lats = self.latlons[:, 0]
         x, y = basemap(lons, lats)
         basemap.plot(x, y, 'o', markersize=markersize, color=color, **kwargs)
+
+    def __eq__(self, other):
+        if self is other:
+            return True
+        if not isinstance(other, Cluster):
+            return False
+        return self.events.equals(other.events)
