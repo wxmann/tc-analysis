@@ -8,7 +8,7 @@ import pytz
 from pandas.util.testing import assert_frame_equal, assert_series_equal
 
 from wxdata import stormevents, _timezones, workdir
-from wxdata.stormevents import urls_for, convert_timestamp_tz
+from wxdata.stormevents import urls_for, convert_timestamp_tz, localize_timestamp_tz
 
 
 def resource_path(filename):
@@ -39,28 +39,46 @@ def test_urls_for(req):
 
 
 def test_convert_timestamp_tz():
-    original_tzs = ('CST-6', 'CST', 'MDT', 'Etc/GMT+6')
-    target_tzs = ('GMT', 'UTC')
+    cst_tzs = ('CST-6', 'CST', 'MDT', 'Etc/GMT+6')
+    gmt_tzs = ('GMT', 'UTC')
 
-    for original_tz, target_tz in product(original_tzs, target_tzs):
+    for tz_cst, tz_gmt in product(cst_tzs, gmt_tzs):
         # our time to GMT
         assert convert_timestamp_tz('2017-01-01 00:00',
-                                    original_tz, target_tz) == pd.Timestamp('2017-01-01 06:00', tz='GMT')
+                                    tz_cst, tz_gmt) == pd.Timestamp('2017-01-01 06:00', tz='GMT')
         assert convert_timestamp_tz('2016-12-31 18:00',
-                                    original_tz, target_tz) == pd.Timestamp('2017-01-01 00:00', tz='GMT')
+                                    tz_cst, tz_gmt) == pd.Timestamp('2017-01-01 00:00', tz='GMT')
 
         # GMT to our time
         assert convert_timestamp_tz('2017-01-01 06:00',
-                                    target_tz, original_tz) == pd.Timestamp('2017-01-01 00:00', tz='Etc/GMT+6')
+                                    tz_gmt, tz_cst) == pd.Timestamp('2017-01-01 00:00', tz='Etc/GMT+6')
 
         # converting timestamp object
         assert convert_timestamp_tz(pd.Timestamp('2017-01-01 00:00'),
-                                    original_tz, target_tz) == pd.Timestamp('2017-01-01 06:00', tz='GMT')
+                                    tz_cst, tz_gmt) == pd.Timestamp('2017-01-01 06:00', tz='GMT')
 
         # converting datetime object
         from datetime import datetime
         assert convert_timestamp_tz(datetime(2017, 1, 1, 0, 0),
-                                    original_tz, target_tz) == pd.Timestamp('2017-01-01 06:00', tz='GMT')
+                                    tz_cst, tz_gmt) == pd.Timestamp('2017-01-01 06:00', tz='GMT')
+
+        # converting already tz-localized object
+        assert convert_timestamp_tz('2017-01-01 00:00-00',
+                                    tz_cst, tz_gmt) == pd.Timestamp('2017-01-01 00:00', tz='GMT')
+
+        assert convert_timestamp_tz(pd.Timestamp('2017-01-01 00:00-00'),
+                                    tz_cst, tz_gmt) == pd.Timestamp('2017-01-01 00:00', tz='GMT')
+
+
+def test_localize_timestamp_tz():
+    assert localize_timestamp_tz(pd.Timestamp('2017-01-01 18:00-00'),
+                                 'CST') == pd.Timestamp('2017-01-01 12:00', tz='Etc/GMT+6')
+
+    assert localize_timestamp_tz(pd.Timestamp('2017-01-01 18:00'),
+                                 'CST') == pd.Timestamp('2017-01-01 18:00', tz='Etc/GMT+6')
+
+    assert localize_timestamp_tz('2017-01-01 18:00',
+                                 'CST') == pd.Timestamp('2017-01-01 18:00', tz='Etc/GMT+6')
 
 
 @mock.patch('wxdata._timezones.tz_for_latlon')
@@ -79,7 +97,7 @@ def test_convert_df_timezone(latlontz):
 
     expected_df = _load_localizing_timezones(resource_path('stormevents_mixed_tzs_togmt.csv'))
     converted_src_df = stormevents.convert_df_tz(src_df, 'GMT')
-    _assert_frame_eq_ignoring_index_and_dtypes(converted_src_df, expected_df)
+    _assert_frame_eq_ignoring_dtypes(converted_src_df, expected_df)
 
 
 @mock.patch('wxdata._timezones.tz_for_latlon')
@@ -99,7 +117,7 @@ def test_convert_df_timezone_multiple_times(latlontz):
     expected_df = _load_localizing_timezones(resource_path('stormevents_mixed_tzs_togmt.csv'))
     intermed = stormevents.convert_df_tz(src_df, 'CST')
     converted_src_df = stormevents.convert_df_tz(intermed, 'GMT')
-    _assert_frame_eq_ignoring_index_and_dtypes(converted_src_df, expected_df)
+    _assert_frame_eq_ignoring_dtypes(converted_src_df, expected_df)
 
 
 def test_filter_df_stormtype():
@@ -123,9 +141,9 @@ def test_filter_df_state():
 
 
 @mock.patch('wxdata.common.get_links', return_value=(
-    'StormEvents_details-ftp_v1.0_d1990_c20170717.csv.gz',
-    'StormEvents_details-ftp_v1.0_d1991_c20170717.csv.gz',
-    'StormEvents_details-ftp_v1.0_d1992_c20170717.csv.gz',
+        'StormEvents_details-ftp_v1.0_d1990_c20170717.csv.gz',
+        'StormEvents_details-ftp_v1.0_d1991_c20170717.csv.gz',
+        'StormEvents_details-ftp_v1.0_d1992_c20170717.csv.gz',
 ))
 def test_load_multiple_years_storm_data(reqpatch):
     workdir.setto(resource_path(''))
@@ -133,13 +151,13 @@ def test_load_multiple_years_storm_data(reqpatch):
                                  states=['Texas', 'Oklahoma', 'Kansas'])
 
     df_expected = stormevents.load_file(resource_path('multiyear_storm_events_expected.csv'))
-    _assert_frame_eq_ignoring_index_and_dtypes(df, df_expected)
+    _assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
 @mock.patch('wxdata.common.get_links', return_value=(
-    'StormEvents_details-ftp_v1.0_d1990_c20170717.csv.gz',
-    'StormEvents_details-ftp_v1.0_d1991_c20170717.csv.gz',
-    'StormEvents_details-ftp_v1.0_d1992_c20170717.csv.gz',
+        'StormEvents_details-ftp_v1.0_d1990_c20170717.csv.gz',
+        'StormEvents_details-ftp_v1.0_d1991_c20170717.csv.gz',
+        'StormEvents_details-ftp_v1.0_d1992_c20170717.csv.gz',
 ))
 def test_load_multiple_years_storm_data_localize_to_tz(reqpatch):
     workdir.setto(resource_path(''))
@@ -147,7 +165,18 @@ def test_load_multiple_years_storm_data_localize_to_tz(reqpatch):
                                  states=['Texas', 'Oklahoma', 'Kansas'], tz='EST')
 
     df_expected = stormevents.load_file(resource_path('multiyear_storm_events_EST_expected.csv'))
-    _assert_frame_eq_ignoring_index_and_dtypes(df, df_expected)
+    _assert_frame_eq_ignoring_dtypes(df, df_expected)
+
+
+@mock.patch('wxdata.common.get_links', return_value=(
+        'StormEvents_details-ftp_v1.0_d1991_c20170717.csv.gz',
+))
+def test_load_two_days_storm_data_localize_to_tz(reqpatch):
+    workdir.setto(resource_path(''))
+    df = stormevents.load_events('1991-04-26 12:00', '1991-04-28 12:00', eventtypes=['Tornado'], tz='UTC')
+
+    df_expected = stormevents.load_file(resource_path('two_day_stormevents_UTC_expected.csv'))
+    _assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
 def test_correct_tornado_times():
@@ -155,7 +184,7 @@ def test_correct_tornado_times():
     df = stormevents.tors.correct_tornado_times(df)
 
     df_expected = stormevents.load_file(resource_path('stormevents_bad_times_corrected.csv'))
-    _assert_frame_eq_ignoring_index_and_dtypes(df, df_expected)
+    _assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
 def test_after_tz_conversion_correct_tornado_times():
@@ -163,7 +192,7 @@ def test_after_tz_conversion_correct_tornado_times():
     df = stormevents.tors.correct_tornado_times(df)
 
     df_expected = stormevents.load_file(resource_path('stormevents_bad_times_GMT_corrected.csv'))
-    _assert_frame_eq_ignoring_index_and_dtypes(df, df_expected)
+    _assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
 def test_get_longevity():
@@ -276,14 +305,15 @@ def test_discretize_tor():
 
 def _load_localizing_timezones(file):
     df = stormevents.load_file(file)
-    df['begin_date_time'] = df.apply(lambda row: _timezones.parse_tz(row['cz_timezone']).localize(row['begin_date_time']),
-                                     axis=1)
+    df['begin_date_time'] = df.apply(
+        lambda row: _timezones.parse_tz(row['cz_timezone']).localize(row['begin_date_time']),
+        axis=1)
     df['end_date_time'] = df.apply(lambda row: _timezones.parse_tz(row['cz_timezone']).localize(row['end_date_time']),
                                    axis=1)
     return df
 
 
-def _assert_frame_eq_ignoring_index_and_dtypes(df1, df2):
-    df1.reset_index(drop=True, inplace=True)
-    df2.reset_index(drop=True, inplace=True)
+def _assert_frame_eq_ignoring_dtypes(df1, df2):
+    # df1.reset_index(drop=True, inplace=True)
+    # df2.reset_index(drop=True, inplace=True)
     assert_frame_equal(df1, df2, check_dtype=False)

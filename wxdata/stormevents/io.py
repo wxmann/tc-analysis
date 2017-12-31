@@ -3,14 +3,13 @@ import warnings
 from datetime import datetime
 from functools import partial
 from itertools import product
-import six
 
 import pandas as pd
+import six
 
 from wxdata.common import get_links, DataRetrievalException
-from wxdata.stormevents.temporal import convert_df_tz
+from wxdata.stormevents.temporal import convert_df_tz, localize_timestamp_tz
 from wxdata.workdir import bulksave
-from wxdata import _timezones as _tz
 
 __all__ = ['load_file', 'load_events', 'load_events_year', 'export',
            'tornadoes', 'hail', 'all_severe', 'tstorm_wind', 'urls_for']
@@ -64,14 +63,23 @@ def load_file(file, keep_data_start=None, keep_data_end=None,
     if states is not None:
         df = df[df.state.isin([state.upper() for state in states])]
 
-    if tz:
-        df = convert_df_tz(df, tz, False)
     if keep_data_start and keep_data_end:
         if tz:
-            keep_data_start = keep_data_start.tz_localize(_tz.parse_tz(tz))
-            keep_data_end = keep_data_end.tz_localize(_tz.parse_tz(tz))
+            keep_data_start = localize_timestamp_tz(keep_data_start, tz)
+            keep_data_end = localize_timestamp_tz(keep_data_end, tz)
+
+            # if we're looking at small date range, we don't have to convert the TZ for the
+            # entire DF, which is expensive. But we do have to account not shifting TZ can cause
+            # a +/- 1 day error.
+            start_m1days = keep_data_start - pd.Timedelta(days=1)
+            end_p1days = keep_data_end + pd.Timedelta(days=1)
+
+            df = df[(df.begin_date_time >= start_m1days) & (df.begin_date_time < end_p1days)]
+            df = convert_df_tz(df, tz, False)
 
         df = df[(df.begin_date_time >= keep_data_start) & (df.begin_date_time < keep_data_end)]
+    elif tz:
+        df = convert_df_tz(df, tz, False)
 
     return df
 
@@ -83,17 +91,22 @@ def load_events(start, end, eventtypes=None, states=None, tz=None, debug=False):
         end = pd.Timestamp(end)
 
     if tz is not None:
-        start = start.tz_localize(_tz.parse_tz(tz))
-        end = end.tz_localize(_tz.parse_tz(tz))
+        start = localize_timestamp_tz(start, tz)
+        end = localize_timestamp_tz(end, tz)
 
     if end < start:
         raise ValueError("End date must be on or after start date")
     year1 = start.year
     year2 = end.year
-    links = urls_for(range(year1, year2 + 1))
 
-    load_df_with_filter = partial(load_file, keep_data_start=None, keep_data_end=None,
-                                  eventtypes=eventtypes, states=states, tz=tz)
+    if year1 == year2:
+        links = urls_for([year1])
+        load_df_with_filter = partial(load_file, keep_data_start=start, keep_data_end=end,
+                                      eventtypes=eventtypes, states=states, tz=tz)
+    else:
+        links = urls_for(range(year1, year2 + 1))
+        load_df_with_filter = partial(load_file, keep_data_start=None, keep_data_end=None,
+                                      eventtypes=eventtypes, states=states, tz=tz)
 
     results = bulksave(links, postsave=load_df_with_filter)
     dfs = [result.output for result in results if result.success and result.output is not None]

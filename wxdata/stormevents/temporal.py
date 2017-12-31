@@ -4,7 +4,8 @@ import pandas as pd
 
 from wxdata import _timezones as _tzhelp
 
-__all__ = ['convert_df_tz', 'sync_datetime_fields', 'convert_timestamp_tz']
+__all__ = ['convert_df_tz', 'sync_datetime_fields',
+           'convert_timestamp_tz', 'localize_timestamp_tz']
 
 
 def convert_df_tz(df, to_tz='CST', copy=True):
@@ -69,6 +70,10 @@ def convert_timestamp_tz(timestamp, from_tz, to_tz):
     original_tz_pd = _pdtz_from_str(from_tz)
     new_tz_pd = _pdtz_from_str(to_tz)
     return pd.Timestamp(timestamp, tz=original_tz_pd).tz_convert(new_tz_pd)
+
+
+def localize_timestamp_tz(timestamp, tz):
+    return convert_timestamp_tz(timestamp, tz, tz)
 
 
 def _pdtz_from_str(tz_str):
