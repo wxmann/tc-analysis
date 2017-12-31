@@ -7,8 +7,10 @@ import pandas as pd
 import pytz
 from pandas.util.testing import assert_frame_equal, assert_series_equal
 
-from wxdata import stormevents, _timezones, workdir
+from wxdata import stormevents, workdir
 from wxdata.stormevents import urls_for, convert_timestamp_tz, localize_timestamp_tz
+from wxdata.stormevents.clusters import Cluster, assert_clusters_equal
+from wxdata import _timezones as _tz
 
 
 def resource_path(filename):
@@ -103,7 +105,7 @@ def test_convert_df_timezone(latlontz):
                      'cz_name', 'cz_timezone', 'begin_date_time', 'end_date_time',
                      'begin_lat', 'begin_lon', 'episode_narrative', 'event_narrative']]
 
-    expected_df = _load_localizing_timezones(resource_path('stormevents_mixed_tzs_togmt.csv'))
+    expected_df = stormevents.load_file(resource_path('stormevents_mixed_tzs_togmt.csv'), tz_localize=True)
     converted_src_df = stormevents.convert_df_tz(src_df, 'GMT')
     _assert_frame_eq_ignoring_dtypes(converted_src_df, expected_df)
 
@@ -122,7 +124,7 @@ def test_convert_df_timezone_multiple_times(latlontz):
                      'cz_name', 'cz_timezone', 'begin_date_time', 'end_date_time',
                      'begin_lat', 'begin_lon', 'episode_narrative', 'event_narrative']]
 
-    expected_df = _load_localizing_timezones(resource_path('stormevents_mixed_tzs_togmt.csv'))
+    expected_df = stormevents.load_file(resource_path('stormevents_mixed_tzs_togmt.csv'), tz_localize=True)
     intermed = stormevents.convert_df_tz(src_df, 'CST')
     converted_src_df = stormevents.convert_df_tz(intermed, 'GMT')
     _assert_frame_eq_ignoring_dtypes(converted_src_df, expected_df)
@@ -173,7 +175,7 @@ def test_load_multiple_years_storm_data_localize_to_tz(reqpatch):
                                  states=['Texas', 'Oklahoma', 'Kansas'], tz='EST')
 
     df_expected = stormevents.load_file(resource_path('multiyear_storm_events_EST_expected.csv'),
-                                        tz_localized_file=True)
+                                        tz_localize=True)
     _assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
@@ -185,7 +187,7 @@ def test_load_two_days_storm_data_localize_to_tz(reqpatch):
     df = stormevents.load_events('1991-04-26 12:00', '1991-04-28 12:00', eventtypes=['Tornado'], tz='UTC')
 
     df_expected = stormevents.load_file(resource_path('two_day_stormevents_UTC_expected.csv'),
-                                        tz_localized_file=True)
+                                        tz_localize=True)
     _assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
@@ -201,10 +203,8 @@ def test_after_tz_conversion_correct_tornado_times():
     df = stormevents.load_file(resource_path('stormevents_bad_times.csv'), tz='GMT')
     df = stormevents.tors.correct_tornado_times(df)
 
-    # This is not exactly a tz-localized file, but the flag is needed to localize the
-    # timestamps in the file
     df_expected = stormevents.load_file(resource_path('stormevents_bad_times_GMT_corrected.csv'),
-                                        tz_localized_file=True)
+                                        tz_localize=True)
     _assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
@@ -316,21 +316,49 @@ def test_discretize_tor():
     assert extrapt['lon'] == tor3['begin_lon']
 
 
-def _load_localizing_timezones(file):
-    df = stormevents.load_file(file)
-    df['begin_date_time'] = df.apply(
-        lambda row: _timezones.parse_tz(row['cz_timezone']).localize(row['begin_date_time']),
-        axis=1)
-    df['end_date_time'] = df.apply(lambda row: _timezones.parse_tz(row['cz_timezone']).localize(row['end_date_time']),
-                                   axis=1)
-    return df
+def test_find_st_clusters():
+    df = stormevents.load_file(resource_path('120414_tornadoes.csv'), tz_localize=True)
+
+    expected_torclusters = []
+    expected_outliers = pd.DataFrame()
+
+    clusterfile_dir = resource_path('120414_clusters')
+    for clusterfile in os.listdir(clusterfile_dir):
+        clusterfile = os.path.join(clusterfile_dir, clusterfile)
+        clusterpts = pd.read_csv(clusterfile, parse_dates=['timestamp'])
+        # hard-code this for now
+        clusterpts['timestamp'] = clusterpts.apply(
+            lambda r: r['timestamp'].tz_localize('GMT').tz_convert(_tz.parse_tz('CST')), axis=1)
+        cluster_num = clusterpts.loc[0, 'cluster']
+        cluster = Cluster(cluster_num, clusterpts, df)
+
+        if cluster_num == stormevents.clust.NOISE_LABEL:
+            expected_outliers = cluster
+        else:
+            expected_torclusters.append(cluster)
+
+    expected_torclusters = sorted(expected_torclusters,
+                                  key=lambda cl: (cl.begin_time, cl.end_time, len(cl)))
+
+    actual_clusters = stormevents.clust.st_clusters(df, 60, 60, 15)
+    actual_torclusters = [clust for index, clust in actual_clusters.items()
+                          if index != stormevents.clust.NOISE_LABEL]
+    actual_outliers = actual_clusters[stormevents.clust.NOISE_LABEL]
+
+    actual_torclusters = sorted(actual_torclusters,
+                                key=lambda cl: (cl.begin_time, cl.end_time, len(cl)))
+
+    assert len(expected_torclusters) == len(actual_torclusters)
+    assert_clusters_equal(actual_outliers, expected_outliers)
+    for actual, expected in zip(actual_torclusters, expected_torclusters):
+        assert_clusters_equal(actual, expected)
 
 
-def _assert_frame_eq_ignoring_dtypes(df1, df2):
+def _assert_frame_eq_ignoring_dtypes(df1, df2,
+                                     dt_columns=('begin_date_time', 'end_date_time')):
     assert_frame_equal(df1, df2, check_dtype=False)
     # the assert_frame_equal function doesn't work with localized vs. naive timestamps.
-    # so we need to do another check
-    if 'begin_date_time' in df1.columns:
-        assert df1.begin_date_time.equals(df2.begin_date_time)
-    if 'end_date_time' in df1.columns:
-        assert df1.end_date_time.equals(df2.end_date_time)
+    # so we need to do another check for datetime columns
+    for col in dt_columns:
+        if col in df1.columns:
+            assert df1[col].equals(df2[col])

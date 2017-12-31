@@ -3,6 +3,7 @@ from functools import partial
 import numpy as np
 import pandas as pd
 from geopy.distance import great_circle
+from pandas.util.testing import assert_frame_equal
 from sklearn.cluster import DBSCAN
 from sklearn.metrics import pairwise_distances
 
@@ -20,7 +21,7 @@ def st_clusters(events, eps_km, eps_min, min_samples, algorithm=None):
     points['timestamp_nanos'] = points.timestamp.astype(np.int64)
     n_jobs = 1 if len(points) < 100 else -1
     similarity = pairwise_distances(points[['lat', 'lon', 'timestamp_nanos']],
-                                    metric=partial(_binary_distance, eps_km=eps_km, eps_min=eps_min),
+                                    metric=partial(_boolean_distance, eps_km=eps_km, eps_min=eps_min),
                                     n_jobs=n_jobs)
 
     db = DBSCAN(eps=0.5, metric='precomputed', min_samples=min_samples)
@@ -34,10 +35,11 @@ def st_clusters(events, eps_km, eps_min, min_samples, algorithm=None):
     return clusts
 
 
-def _binary_distance(pt1, pt2, eps_km, eps_min):
+def _boolean_distance(pt1, pt2, eps_km, eps_min,
+                      lat_index=0, lon_index=1, timestamp_nanos_index=2):
     nanos_per_min = 10 ** 9 * 60
-    return abs(pt1[2] - pt2[2]) > eps_min * nanos_per_min or \
-           great_circle((pt1[0], pt1[1]), (pt2[0], pt2[1])).km > eps_km
+    return abs(pt1[timestamp_nanos_index] - pt2[timestamp_nanos_index]) > eps_min * nanos_per_min or \
+           great_circle((pt1[lat_index], pt1[lon_index]), (pt2[lat_index], pt2[lon_index])).km > eps_km
 
 
 def _brute_st_clusters(events, eps_km, eps_min, min_samples):
@@ -179,4 +181,27 @@ class Cluster(object):
             return True
         if not isinstance(other, Cluster):
             return False
-        return self.events.equals(other.events)
+
+        try:
+            assert_clusters_equal(self, other)
+            return True
+        except AssertionError:
+            return False
+
+
+def assert_clusters_equal(clust1, clust2):
+    clust1_pts = clust1.pts.copy()
+    clust2_pts = clust2.pts.copy()
+    clust1_pts.reset_index(drop=True, inplace=True)
+    clust2_pts.reset_index(drop=True, inplace=True)
+    clust1_pts.drop('cluster', inplace=True, axis=1)
+    clust2_pts.drop('cluster', inplace=True, axis=1)
+
+    assert_frame_equal(clust1_pts, clust2_pts)
+
+    clust1_evts = clust1.events.copy()
+    clust2_evts = clust2.events.copy()
+    clust1_evts.reset_index(drop=True, inplace=True)
+    clust2_evts.reset_index(drop=True, inplace=True)
+
+    assert_frame_equal(clust1_evts, clust2_evts)

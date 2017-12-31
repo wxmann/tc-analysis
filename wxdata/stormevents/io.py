@@ -42,7 +42,7 @@ def _year_from_link(link):
 
 
 def load_file(file, keep_data_start=None, keep_data_end=None,
-              eventtypes=None, states=None, tz=None, tz_localized_file=False):
+              eventtypes=None, states=None, tz=None, tz_localize=False):
     df = pd.read_csv(file,
                      parse_dates=['BEGIN_DATE_TIME', 'END_DATE_TIME'],
                      infer_datetime_format=True,
@@ -58,10 +58,14 @@ def load_file(file, keep_data_start=None, keep_data_end=None,
 
     df.columns = map(str.lower, df.columns)
 
-    if tz_localized_file:
+    if tz_localize:
         # hack to restore tz information after loading the file
         # most times this step will not be needed. This is just for testing and dataframe comparison
         # TODO: can we implement a localize dataframe function in the temporal processing library?
+
+        # We can't use the localize_timestamp_tz function here because pandas
+        # converts timestamps to UTC time, then makes them tz-naive. The localize function
+        # assumes the timestamps are naive but in the correct timezone.
         df['begin_date_time'] = df.apply(
             lambda r: convert_timestamp_tz(r.begin_date_time, 'UTC', r.cz_timezone), axis=1)
         df['end_date_time'] = df.apply(
@@ -148,8 +152,11 @@ def load_events_year(year, **kwargs):
     return load_events(start, end, **kwargs)
 
 
-def export(df, saveloc, **kwargs):
-    df.to_csv(saveloc, header=[col.upper() for col in df.columns], index=False, **kwargs)
+def export(df, saveloc, lowercase_cols=True, **kwargs):
+    if lowercase_cols:
+        df.to_csv(saveloc, header=[col.upper() for col in df.columns], index=False, **kwargs)
+    else:
+        df.to_csv(saveloc, index=False, **kwargs)
 
 
 tornadoes = partial(load_events, eventtypes=['Tornado'])
