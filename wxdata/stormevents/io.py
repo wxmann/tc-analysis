@@ -8,7 +8,7 @@ import pandas as pd
 import six
 
 from wxdata.common import get_links, DataRetrievalException
-from wxdata.stormevents.temporal import convert_df_tz, localize_timestamp_tz
+from wxdata.stormevents.temporal import convert_df_tz, localize_timestamp_tz, convert_timestamp_tz
 from wxdata.workdir import bulksave
 
 __all__ = ['load_file', 'load_events', 'load_events_year', 'export',
@@ -42,7 +42,7 @@ def _year_from_link(link):
 
 
 def load_file(file, keep_data_start=None, keep_data_end=None,
-              eventtypes=None, states=None, tz=None):
+              eventtypes=None, states=None, tz=None, tz_localized_file=False):
     df = pd.read_csv(file,
                      parse_dates=['BEGIN_DATE_TIME', 'END_DATE_TIME'],
                      infer_datetime_format=True,
@@ -57,6 +57,15 @@ def load_file(file, keep_data_start=None, keep_data_end=None,
                      compression='infer')
 
     df.columns = map(str.lower, df.columns)
+
+    if tz_localized_file:
+        # hack to restore tz information after loading the file
+        # most times this step will not be needed. This is just for testing and dataframe comparison
+        # TODO: can we implement a localize dataframe function in the temporal processing library?
+        df['begin_date_time'] = df.apply(
+            lambda r: convert_timestamp_tz(r.begin_date_time, 'UTC', r.cz_timezone), axis=1)
+        df['end_date_time'] = df.apply(
+            lambda r: convert_timestamp_tz(r.end_date_time, 'UTC', r.cz_timezone), axis=1)
 
     if eventtypes is not None:
         df = df[df.event_type.isin(eventtypes)]
@@ -93,6 +102,10 @@ def load_events(start, end, eventtypes=None, states=None, tz=None, debug=False):
     if tz is not None:
         start = localize_timestamp_tz(start, tz)
         end = localize_timestamp_tz(end, tz)
+
+    #FIXME: there is a corner case of start and end being near the turn of the year that fails.
+    # We need to resolve the start and end variables to able to load both years'
+    # dataframes if needed.
 
     if end < start:
         raise ValueError("End date must be on or after start date")

@@ -66,6 +66,10 @@ def test_convert_timestamp_tz():
         assert convert_timestamp_tz('2017-01-01 00:00-00',
                                     tz_cst, tz_gmt) == pd.Timestamp('2017-01-01 00:00', tz='GMT')
 
+        # converting to same timezone
+        assert convert_timestamp_tz('2017-01-01 18:00-06',
+                                    tz_cst, tz_cst) == pd.Timestamp('2017-01-01 18:00', tz='Etc/GMT+6')
+
         assert convert_timestamp_tz(pd.Timestamp('2017-01-01 00:00-00'),
                                     tz_cst, tz_gmt) == pd.Timestamp('2017-01-01 00:00', tz='GMT')
 
@@ -78,6 +82,10 @@ def test_localize_timestamp_tz():
                                  'CST') == pd.Timestamp('2017-01-01 18:00', tz='Etc/GMT+6')
 
     assert localize_timestamp_tz('2017-01-01 18:00',
+                                 'CST') == pd.Timestamp('2017-01-01 18:00', tz='Etc/GMT+6')
+
+    # doesn't mess up an already localized timestamp
+    assert localize_timestamp_tz(pd.Timestamp('2017-01-01 18:00-06'),
                                  'CST') == pd.Timestamp('2017-01-01 18:00', tz='Etc/GMT+6')
 
 
@@ -164,7 +172,8 @@ def test_load_multiple_years_storm_data_localize_to_tz(reqpatch):
     df = stormevents.load_events('1990-01-01', '1992-10-31', eventtypes=['Tornado'],
                                  states=['Texas', 'Oklahoma', 'Kansas'], tz='EST')
 
-    df_expected = stormevents.load_file(resource_path('multiyear_storm_events_EST_expected.csv'))
+    df_expected = stormevents.load_file(resource_path('multiyear_storm_events_EST_expected.csv'),
+                                        tz_localized_file=True)
     _assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
@@ -175,7 +184,8 @@ def test_load_two_days_storm_data_localize_to_tz(reqpatch):
     workdir.setto(resource_path(''))
     df = stormevents.load_events('1991-04-26 12:00', '1991-04-28 12:00', eventtypes=['Tornado'], tz='UTC')
 
-    df_expected = stormevents.load_file(resource_path('two_day_stormevents_UTC_expected.csv'))
+    df_expected = stormevents.load_file(resource_path('two_day_stormevents_UTC_expected.csv'),
+                                        tz_localized_file=True)
     _assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
@@ -191,7 +201,10 @@ def test_after_tz_conversion_correct_tornado_times():
     df = stormevents.load_file(resource_path('stormevents_bad_times.csv'), tz='GMT')
     df = stormevents.tors.correct_tornado_times(df)
 
-    df_expected = stormevents.load_file(resource_path('stormevents_bad_times_GMT_corrected.csv'))
+    # This is not exactly a tz-localized file, but the flag is needed to localize the
+    # timestamps in the file
+    df_expected = stormevents.load_file(resource_path('stormevents_bad_times_GMT_corrected.csv'),
+                                        tz_localized_file=True)
     _assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
@@ -314,6 +327,10 @@ def _load_localizing_timezones(file):
 
 
 def _assert_frame_eq_ignoring_dtypes(df1, df2):
-    # df1.reset_index(drop=True, inplace=True)
-    # df2.reset_index(drop=True, inplace=True)
     assert_frame_equal(df1, df2, check_dtype=False)
+    # the assert_frame_equal function doesn't work with localized vs. naive timestamps.
+    # so we need to do another check
+    if 'begin_date_time' in df1.columns:
+        assert df1.begin_date_time.equals(df2.begin_date_time)
+    if 'end_date_time' in df1.columns:
+        assert df1.end_date_time.equals(df2.end_date_time)
