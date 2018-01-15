@@ -14,25 +14,27 @@ NOISE_LABEL = -1
 
 def st_clusters(events, eps_km, eps_min, min_samples, algorithm=None):
     assert min_samples > 0
+
     if algorithm == 'brute':
-        return _brute_st_clusters(events, eps_km, eps_min, min_samples)
+        cluster_dict = _brute_st_clusters(events, eps_km, eps_min, min_samples)
+    else:
+        points = discretize(events)
+        points['timestamp_nanos'] = points.timestamp.astype(np.int64)
+        n_jobs = 1 if len(points) < 100 else -1
+        similarity = pairwise_distances(points[['lat', 'lon', 'timestamp_nanos']],
+                                        metric=partial(_boolean_distance, eps_km=eps_km, eps_min=eps_min),
+                                        n_jobs=n_jobs)
 
-    points = discretize(events)
-    points['timestamp_nanos'] = points.timestamp.astype(np.int64)
-    n_jobs = 1 if len(points) < 100 else -1
-    similarity = pairwise_distances(points[['lat', 'lon', 'timestamp_nanos']],
-                                    metric=partial(_boolean_distance, eps_km=eps_km, eps_min=eps_min),
-                                    n_jobs=n_jobs)
+        db = DBSCAN(eps=0.5, metric='precomputed', min_samples=min_samples)
+        cluster_labels = db.fit_predict(similarity)
 
-    db = DBSCAN(eps=0.5, metric='precomputed', min_samples=min_samples)
-    cluster_labels = db.fit_predict(similarity)
+        points.drop('timestamp_nanos', axis=1, inplace=True)
+        points['cluster'] = cluster_labels
 
-    points.drop('timestamp_nanos', axis=1, inplace=True)
-    points['cluster'] = cluster_labels
+        cluster_dict = {label: Cluster(label, points[points.cluster == label], events)
+                        for label in points.cluster.unique()}
 
-    clusts = {label: Cluster(label, points[points.cluster == label], events)
-              for label in points.cluster.unique()}
-    return clusts
+    return ClusterGroup(cluster_dict)
 
 
 def _boolean_distance(pt1, pt2, eps_km, eps_min,
@@ -40,6 +42,9 @@ def _boolean_distance(pt1, pt2, eps_km, eps_min,
     nanos_per_min = 10 ** 9 * 60
     return abs(pt1[timestamp_nanos_index] - pt2[timestamp_nanos_index]) > eps_min * nanos_per_min or \
            great_circle((pt1[lat_index], pt1[lon_index]), (pt2[lat_index], pt2[lon_index])).km > eps_km
+
+
+## brute force clustering algorithm
 
 
 def _brute_st_clusters(events, eps_km, eps_min, min_samples):
@@ -105,6 +110,31 @@ def _neighbors(df, spatial_dist, temporal_dist, index):
     filtered = df[(df.timestamp >= tmin) & (df.timestamp <= tmax)]
     mask = filtered.apply(lambda r: great_circle((r.lat, r.lon), (pt.lat, pt.lon)).km, axis=1) < spatial_dist
     return filtered[mask & (filtered.index != pt.name)]
+
+
+## Objects
+
+
+class ClusterGroup(object):
+    def __init__(self, cluster_dict):
+        self._cluster_dict = cluster_dict
+
+    def __getitem__(self, item):
+        return self._cluster_dict[item]
+
+    def __contains__(self, item):
+        return item in self._cluster_dict
+
+    def __len__(self):
+        return len(self.clusters)
+
+    @property
+    def clusters(self):
+        return [clust for i, clust in self._cluster_dict.items() if i != NOISE_LABEL]
+
+    @property
+    def noise(self):
+        return self._cluster_dict[NOISE_LABEL]
 
 
 class Cluster(object):
@@ -187,6 +217,9 @@ class Cluster(object):
             return True
         except AssertionError:
             return False
+
+
+## utilities
 
 
 def assert_clusters_equal(clust1, clust2):

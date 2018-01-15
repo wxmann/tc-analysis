@@ -340,10 +340,9 @@ def test_find_st_clusters():
     expected_torclusters = sorted(expected_torclusters,
                                   key=lambda cl: (cl.begin_time, cl.end_time, len(cl)))
 
-    actual_clusters = stormevents.clust.st_clusters(df, 60, 60, 15)
-    actual_torclusters = [clust for index, clust in actual_clusters.items()
-                          if index != stormevents.clust.NOISE_LABEL]
-    actual_outliers = actual_clusters[stormevents.clust.NOISE_LABEL]
+    result = stormevents.clust.st_clusters(df, 60, 60, 15)
+    actual_torclusters = result.clusters
+    actual_outliers = result.noise
 
     actual_torclusters = sorted(actual_torclusters,
                                 key=lambda cl: (cl.begin_time, cl.end_time, len(cl)))
