@@ -2,12 +2,16 @@ from functools import partial
 
 import numpy as np
 import pandas as pd
+import matplotlib.patheffects as path_effects
+import matplotlib.patches as mpatches
 from geopy.distance import great_circle
 from pandas.util.testing import assert_frame_equal
 from sklearn.cluster import DBSCAN
 from sklearn.metrics import pairwise_distances
 
 from wxdata.stormevents.tornprocessing import discretize, ef, longevity
+
+__all__ = ['st_clusters', 'legend_labels', 'plot_clusters', 'assert_clusters_equal', 'NOISE_LABEL']
 
 NOISE_LABEL = -1
 
@@ -126,11 +130,15 @@ class ClusterGroup(object):
         return item in self._cluster_dict
 
     def __len__(self):
-        return len(self.clusters)
+        if NOISE_LABEL in self._cluster_dict:
+            return len(self._cluster_dict) - 1
+        else:
+            return len(self._cluster_dict)
 
     @property
     def clusters(self):
-        return [clust for i, clust in self._cluster_dict.items() if i != NOISE_LABEL]
+        unordered = [clust for i, clust in self._cluster_dict.items() if i != NOISE_LABEL]
+        return sorted(unordered, key=lambda cl: (cl.begin_time, cl.end_time, len(cl)))
 
     @property
     def noise(self):
@@ -238,3 +246,47 @@ def assert_clusters_equal(clust1, clust2):
     clust2_evts.reset_index(drop=True, inplace=True)
 
     assert_frame_equal(clust1_evts, clust2_evts)
+
+
+## plotting
+
+def _default_cluster_label(clust, outlier=False):
+    if not outlier:
+        time_part = '({}) {} to {} CST'.format(clust.index, clust.begin_time.strftime('%Y-%m-%d %H:%M'),
+                                               clust.end_time.strftime('%Y-%m-%d %H:%M'))
+    else:
+        time_part = 'outliers'
+
+    clust_events = clust.events
+    clust_events = clust_events[clust_events.event_type == 'Tornado']
+    efs = ef(clust_events)
+
+    ef_parts = ['EF{}: {}'.format(f, len(efs[efs == f])) for f in range(0, 6)]
+    segments_part = '{} segments ({})'.format(len(clust_events), ', '.join(ef_parts))
+
+    fats = clust_events.deaths_direct.sum()
+    injs = clust_events.injuries_direct.sum()
+    casualty_part = '{} fatalities | {} injuries'.format(fats, injs)
+
+    return '\n'.join([time_part, segments_part, casualty_part])
+
+
+def legend_labels(cluster_groups, cluster_colors, noise_color='gray'):
+    legend_handles = []
+
+    for clust, color in zip(cluster_groups.clusters, cluster_colors):
+        legend_handles.append(mpatches.Patch(color=color, label=_default_cluster_label(clust, outlier=False)))
+
+    legend_handles.append(mpatches.Patch(color=noise_color,
+                                         label=_default_cluster_label(cluster_groups.noise, outlier=True)))
+
+    return legend_handles
+
+
+def plot_clusters(cluster_groups, basemap, cluster_colors, noise_color='gray'):
+    shadow = path_effects.withSimplePatchShadow(offset=(1, -1))
+
+    for clust, color in zip(cluster_groups.clusters, cluster_colors):
+        clust.plot(basemap, markersize=1.5, color=color, path_effects=[shadow])
+
+    cluster_groups.noise.plot(basemap, markersize=1.5, color=noise_color, path_effects=[shadow])
