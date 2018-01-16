@@ -250,10 +250,11 @@ def assert_clusters_equal(clust1, clust2):
 
 ## plotting
 
-def _default_cluster_label(clust, outlier=False):
+
+def _default_cluster_label(clust, label='', outlier=False):
     if not outlier:
-        time_part = '({}) {} to {} CST'.format(clust.index, clust.begin_time.strftime('%Y-%m-%d %H:%M'),
-                                               clust.end_time.strftime('%Y-%m-%d %H:%M'))
+        time_part = '({}) {} to {}'.format(label, clust.begin_time.strftime('%Y-%m-%d %H:%M'),
+                                           clust.end_time.strftime('%Y-%m-%d %H:%M'))
     else:
         time_part = 'outliers'
 
@@ -272,21 +273,28 @@ def _default_cluster_label(clust, outlier=False):
 
 
 def legend_labels(cluster_groups, cluster_colors, noise_color='gray'):
+    assert len(cluster_groups) == len(cluster_colors)
+
     legend_handles = []
 
-    for clust, color in zip(cluster_groups.clusters, cluster_colors):
-        legend_handles.append(mpatches.Patch(color=color, label=_default_cluster_label(clust, outlier=False)))
+    for label, clust in enumerate(cluster_groups.clusters):
+        color = cluster_colors[clust.index]
+        legend_handles.append(mpatches.Patch(color=color,
+                                             label=_default_cluster_label(clust, label, outlier=False)))
 
+    noise = cluster_groups.noise
     legend_handles.append(mpatches.Patch(color=noise_color,
-                                         label=_default_cluster_label(cluster_groups.noise, outlier=True)))
+                                         label=_default_cluster_label(noise, outlier=True)))
 
     return legend_handles
 
 
 def plot_clusters(cluster_groups, basemap, cluster_colors, noise_color='gray'):
-    shadow = path_effects.withSimplePatchShadow(offset=(1, -1))
+    assert len(cluster_groups) == len(cluster_colors)
+    shadow = path_effects.withSimplePatchShadow(offset=(1, -1), alpha=0.6)
 
-    for clust, color in zip(cluster_groups.clusters, cluster_colors):
+    for clust in cluster_groups.clusters:
+        color = cluster_colors[clust.index]
         clust.plot(basemap, markersize=1.5, color=color, path_effects=[shadow])
 
     cluster_groups.noise.plot(basemap, markersize=1.5, color=noise_color, path_effects=[shadow])
