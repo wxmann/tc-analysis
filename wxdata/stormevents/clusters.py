@@ -3,12 +3,12 @@ from functools import partial
 import numpy as np
 import pandas as pd
 import matplotlib.patheffects as path_effects
-import matplotlib.patches as mpatches
 from geopy.distance import great_circle
 from pandas.util.testing import assert_frame_equal
 from sklearn.cluster import DBSCAN
 from sklearn.metrics import pairwise_distances
 
+from wxdata.plotting import plot_points
 from wxdata.stormevents.tornprocessing import discretize, ef, longevity
 
 __all__ = ['st_clusters', 'legend_labels', 'plot_clusters', 'assert_clusters_equal', 'NOISE_LABEL']
@@ -195,7 +195,28 @@ class Cluster(object):
             'center': self.centroid
         }
 
-    def tornado_stats(self):
+    def describe_tors(self, show_index=False):
+        if self._index == NOISE_LABEL:
+            time_part = '(Outliers)'
+        else:
+            time_part = '{} to {}'.format(self.begin_time.strftime('%Y-%m-%d %H:%M'),
+                                          self.end_time.strftime('%Y-%m-%d %H:%M'))
+            if show_index:
+                time_part = '({}) '.format(self.index) + time_part
+
+        stats = self.tor_stats()
+
+        ef_labels = ['EF{}'.format(f) for f in range(0, 6)]
+        ef_parts = ['{}: {}'.format(label, stats[label.lower()]) for label in ef_labels]
+        if stats['ef?']:
+            ef_parts.append('EF?: {}'.format(stats['ef?']))
+
+        segments_part = '{} segments ({})'.format(stats['segments'], ', '.join(ef_parts))
+        casualty_part = '{} fatalities | {} injuries'.format(stats['fatalities'], stats['injuries'])
+
+        return '\n'.join([time_part, segments_part, casualty_part])
+
+    def tor_stats(self):
         all_events = self.events
         tor_events = all_events[all_events.event_type == 'Tornado']
         tor_ef = ef(tor_events)
@@ -205,14 +226,10 @@ class Cluster(object):
         ret['ef?'] = tor_ef[tor_ef.isnull()].count()
         ret['segments'] = len(tor_events)
         ret['total_time'] = tor_longevity.sum()
+        ret['fatalities'] = tor_events.deaths_direct.sum()
+        ret['injuries'] = tor_events.injuries_direct.sum()
 
         return ret
-
-    def plot(self, basemap, markersize=2, color=None, **kwargs):
-        lons = self.latlons[:, 1]
-        lats = self.latlons[:, 0]
-        x, y = basemap(lons, lats)
-        basemap.plot(x, y, 'o', markersize=markersize, color=color, **kwargs)
 
     def __eq__(self, other):
         if self is other:
@@ -228,7 +245,6 @@ class Cluster(object):
 
 
 ## utilities
-
 
 def assert_clusters_equal(clust1, clust2):
     clust1_pts = clust1.pts.copy()
@@ -250,51 +266,21 @@ def assert_clusters_equal(clust1, clust2):
 
 ## plotting
 
+# TODO: should we keep this function?
 
-def _default_cluster_label(clust, label='', outlier=False):
-    if not outlier:
-        time_part = '({}) {} to {}'.format(label, clust.begin_time.strftime('%Y-%m-%d %H:%M'),
-                                           clust.end_time.strftime('%Y-%m-%d %H:%M'))
-    else:
-        time_part = 'outliers'
+def plot_clusters(cluster_groups, basemap, cluster_colors, noise_color='gray',
+                  legend=None):
 
-    clust_events = clust.events
-    clust_events = clust_events[clust_events.event_type == 'Tornado']
-    efs = ef(clust_events)
-
-    ef_parts = ['EF{}: {}'.format(f, len(efs[efs == f])) for f in range(0, 6)]
-    segments_part = '{} segments ({})'.format(len(clust_events), ', '.join(ef_parts))
-
-    fats = clust_events.deaths_direct.sum()
-    injs = clust_events.injuries_direct.sum()
-    casualty_part = '{} fatalities | {} injuries'.format(fats, injs)
-
-    return '\n'.join([time_part, segments_part, casualty_part])
-
-
-def legend_labels(cluster_groups, cluster_colors, noise_color='gray'):
-    assert len(cluster_groups) == len(cluster_colors)
-
-    legend_handles = []
-
-    for label, clust in enumerate(cluster_groups.clusters):
-        color = cluster_colors[clust.index]
-        legend_handles.append(mpatches.Patch(color=color,
-                                             label=_default_cluster_label(clust, label, outlier=False)))
-
-    noise = cluster_groups.noise
-    legend_handles.append(mpatches.Patch(color=noise_color,
-                                         label=_default_cluster_label(noise, outlier=True)))
-
-    return legend_handles
-
-
-def plot_clusters(cluster_groups, basemap, cluster_colors, noise_color='gray'):
     assert len(cluster_groups) == len(cluster_colors)
     shadow = path_effects.withSimplePatchShadow(offset=(1, -1), alpha=0.6)
 
     for clust in cluster_groups.clusters:
         color = cluster_colors[clust.index]
-        clust.plot(basemap, markersize=1.5, color=color, path_effects=[shadow])
+        plot_points(clust.pts, basemap, color, markersize=1.5, path_effects=[shadow])
+        if legend:
+            legend.append(color, clust.describe_tors())
 
-    cluster_groups.noise.plot(basemap, markersize=1.5, color=noise_color, path_effects=[shadow])
+    noise = cluster_groups.noise
+    plot_points(noise.pts, basemap, markersize=1.5, color=noise_color, path_effects=[shadow])
+    if legend:
+        legend.append(noise_color, noise.describe_tors())
