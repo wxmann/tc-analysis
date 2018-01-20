@@ -60,6 +60,12 @@ def bottom_right_textbox(ax, text, fontsize=16):
              bbox=dict(alpha=0.75, facecolor='white', edgecolor='gray'))
 
 
+def top_right_textbox(ax, text, fontsize=16):
+    plt.text(0.99, 0.99, text, transform=ax.transAxes, fontsize=fontsize,
+             verticalalignment='top', horizontalalignment='right',
+             bbox=dict(alpha=0.75, facecolor='white', edgecolor='gray'))
+
+
 def simple_basemap(bbox, proj='merc', resolution='i',
                    draw=('coastlines', 'countries', 'states', 'counties', 'highways')):
 
