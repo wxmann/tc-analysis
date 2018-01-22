@@ -1,11 +1,16 @@
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
+import matplotlib.dates as dates
 import matplotlib.patches as mpatches
+import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from mpl_toolkits.basemap import Basemap
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 from wxdata.config import get_resource
+
 
 # TODO: add tests for functions in this module!
 
@@ -44,7 +49,6 @@ def plot_time_progression(pts, basemap, time_buckets, colormap,
 
 def plot_cities(city_coordinates, basemap,
                 color='k', marker='+', markersize=9, labelsize=12, alpha=0.6, dx=0.05, dy=-0.15):
-
     for city in city_coordinates:
         coords = city_coordinates[city]
         x, y = basemap(*reversed(coords))
@@ -52,6 +56,50 @@ def plot_cities(city_coordinates, basemap,
 
         labelx, labely = basemap(coords[1] + dx, coords[0] + dy)
         plt.text(labelx, labely, city, fontsize=labelsize, color=color, alpha=alpha)
+
+
+def hovmoller_with_map(xrdata, map_bbox, figsize=(12, 16), plot_map_ratio=(6, 1),
+                       ylabelsize='x-large', xlabelsize='medium', dayinterval=2, xtickinterval=60,
+                       grid=True, datefrmt='%b %-d', grid_kw=None, plotfunc=None, plot_kw=None):
+    # setup the subplot layout
+    fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize,
+                                   gridspec_kw=dict(height_ratios=list(plot_map_ratio)))
+    plt.tight_layout()
+
+    # setup the plotting from the data
+    if not plotfunc:
+        plotfunc = xrdata.plot.contourf
+    if not plot_kw:
+        plot_kw = dict(center=0, levels=20, yincrease=False)
+
+    for fixed_kw in ('ax', 'add_colorbar', 'add_labels'):
+        if fixed_kw in plot_kw:
+            plot_kw.pop(fixed_kw)
+
+    mappable = plotfunc(ax=ax1, add_colorbar=False, add_labels=False, **plot_kw)
+
+    # map
+    basemap = simple_basemap(map_bbox, proj='cyl', resolution='l', ax=ax2, us_detail=False)
+
+    # gridlines and ticks
+
+    if grid:
+        if grid_kw is None:
+            grid_kw = dict(color='k', linestyle='-.', linewidth=1, alpha=0.25)
+        ax1.grid(**grid_kw)
+        ax2.grid(**grid_kw)
+
+    ax1.tick_params(labelsize=ylabelsize)
+    if xlabelsize:
+        ax2.tick_params(labelsize=xlabelsize)
+
+    lon0, lon1 = map_bbox[:2]
+    ax1.xaxis.set_ticks(np.arange(lon0, lon1, xtickinterval))
+    ax1.yaxis.set_major_locator(dates.DayLocator(interval=dayinterval))
+    ax1.yaxis.set_major_formatter(dates.DateFormatter(datefrmt))
+
+    axes = (ax1, ax2)
+    return fig, axes, mappable, basemap
 
 
 def bottom_right_textbox(ax, text, fontsize=16):
@@ -74,8 +122,7 @@ def top_left_textbox(ax, text, fontsize=16):
 
 def simple_basemap(bbox, proj='merc', resolution='i', ax=None,
                    us_detail=True, draw=None):
-
-    llcrnrlon, urcrnrlon, llcrnrlat, urcrnrlat = bbox[:]
+    llcrnrlon, urcrnrlon, llcrnrlat, urcrnrlat = bbox[:4]
 
     m = Basemap(projection=proj, ax=ax,
                 llcrnrlon=llcrnrlon, llcrnrlat=llcrnrlat, urcrnrlon=urcrnrlon, urcrnrlat=urcrnrlat,
@@ -115,6 +162,37 @@ class LegendBuilder(object):
 
     def plot_legend(self):
         plt.legend(handles=self.handles, **self.legend_kw)
+
+
+def draw_latlon_box(basemap, latlon_bbox, facecolor='none', edgecolor='red', linewidth=3, **kwargs):
+    lon1, lon2, lat1, lat2 = latlon_bbox[:]
+    x1, y1 = basemap(lon1, lat1)
+    x2, y2 = basemap(lon1, lat2)
+    x3, y3 = basemap(lon2, lat2)
+    x4, y4 = basemap(lon2, lat1)
+    box = mpatches.Polygon([(x1, y1), (x2, y2), (x3, y3), (x4, y4)],
+                           facecolor=facecolor, edgecolor=edgecolor, linewidth=linewidth, **kwargs)
+    basemap.ax.add_patch(box)
+
+
+def shadow(offset=(0.5, 0.5), alpha=0.6):
+    return path_effects.withSimplePatchShadow(offset=offset, alpha=alpha, shadow_rgbFace='black')
+
+
+def inset_colorbar(mappable, ax, width='60%', height='3%', loc=1, tickcolor='k', ticksize='large',
+                   title=None, titlecolor='k', titlesize=14):
+    cbar_ax = inset_axes(ax, width=width, height=height, loc=loc)
+    cbar = plt.colorbar(mappable, cax=cbar_ax, orientation='horizontal')
+    cbar.ax.xaxis.set_tick_params(which='major', direction='in')
+
+    text_shadow = shadow()
+    plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color=tickcolor, size=ticksize, y=1.0,
+             path_effects=[text_shadow])
+    if title:
+        cbar.set_label(title, color=titlecolor, path_effects=[text_shadow], fontsize=titlesize)
+
+
+## Color sampling
 
 
 def sample_colors(n, src_cmap):
