@@ -6,10 +6,20 @@ from multiprocessing import Pool
 
 import requests
 from bs4 import BeautifulSoup
+from siphon.catalog import TDSCatalog
 
 
 class DataRetrievalException(Exception):
     pass
+
+
+def tds_dataset_url(catalog_or_url, ds_name, service='OPENDAP'):
+    if isinstance(catalog_or_url, TDSCatalog):
+        cat = catalog_or_url
+    else:
+        cat = TDSCatalog(catalog_or_url)
+    ds = cat.datasets[ds_name]
+    return ds.access_urls[service]
 
 
 def get_links(url, ext=None, file_filter=None):

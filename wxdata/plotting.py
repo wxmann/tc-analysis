@@ -66,14 +66,25 @@ def top_right_textbox(ax, text, fontsize=16):
              bbox=dict(alpha=0.75, facecolor='white', edgecolor='gray'))
 
 
-def simple_basemap(bbox, proj='merc', resolution='i',
-                   draw=('coastlines', 'countries', 'states', 'counties', 'highways')):
+def top_left_textbox(ax, text, fontsize=16):
+    plt.text(0.01, 0.99, text, transform=ax.transAxes, fontsize=fontsize,
+             verticalalignment='top', horizontalalignment='left',
+             bbox=dict(alpha=0.75, facecolor='white', edgecolor='gray'))
+
+
+def simple_basemap(bbox, proj='merc', resolution='i', ax=None,
+                   us_detail=True, draw=None):
 
     llcrnrlon, urcrnrlon, llcrnrlat, urcrnrlat = bbox[:]
 
-    m = Basemap(projection=proj,
+    m = Basemap(projection=proj, ax=ax,
                 llcrnrlon=llcrnrlon, llcrnrlat=llcrnrlat, urcrnrlon=urcrnrlon, urcrnrlat=urcrnrlat,
                 resolution=resolution, area_thresh=1000)
+
+    if draw is None:
+        draw = ['coastlines', 'countries', 'states']
+        if us_detail:
+            draw += ['counties', 'highways']
 
     if 'coastlines' in draw:
         m.drawcoastlines()
