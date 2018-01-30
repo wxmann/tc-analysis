@@ -1,7 +1,3 @@
-import matplotlib.colors as colors
-import matplotlib.cm as cm
-
-
 def diff(df1, df2):
     return df1.merge(df2, indicator=True, how='outer')
 
@@ -22,3 +18,8 @@ def label_iter():
         for i in range(len(alphabet)):
             yield alphabet[i] * count
         count += 1
+
+
+def log_if_debug(stmt, debug):
+    if debug:
+        print(stmt)
