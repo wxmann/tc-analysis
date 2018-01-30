@@ -5,7 +5,7 @@ from boto.s3.connection import S3Connection
 
 from datetime import datetime, timedelta
 
-from wxdata import workdir, geog
+from wxdata import workdir
 from wxdata.plotting import draw_hways
 from wxdata.utils import log_if_debug
 
@@ -145,7 +145,7 @@ def plot_level2(file_or_radar, field='reflectivity', sweep=0, bounds=None, resol
         zoomwidth, zoomheight = zoom_km
         geog_kw = dict(width=zoomwidth * 2 * 1000, height=zoomheight * 2 * 1000,
                        lon_0=lonctr, lat_0=latctr)
-        log_if_debug('width: {}, height: {}'.format(geog_kw['width'], geog_kw['height']))
+        log_if_debug('width: {}, height: {}'.format(geog_kw['width'], geog_kw['height']), debug)
     else:
         lon0, lon1, lat0, lat1 = bbox
         geog_kw = dict(min_lon=lon0, min_lat=lat0, max_lon=lon1, max_lat=lat1)
@@ -160,12 +160,11 @@ def plot_level2(file_or_radar, field='reflectivity', sweep=0, bounds=None, resol
                          embelish=False, colorbar_flag=False, ax=ax,
                          **geog_kw)
 
-    basemap_draw_on = basemap if basemap is not None else display.basemap
     if 'states' in map_layers:
-        basemap_draw_on.drawstates(ax=ax)
+        display.basemap.drawstates(ax=ax)
     if 'counties' in map_layers:
-        basemap_draw_on.drawcounties(ax=ax)
+        display.basemap.drawcounties(ax=ax)
     if 'highways' in map_layers:
-        draw_hways(basemap_draw_on, ax=ax)
+        draw_hways(display.basemap, ax=ax)
 
     return radarsample, display
