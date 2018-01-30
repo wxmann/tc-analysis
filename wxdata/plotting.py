@@ -147,9 +147,9 @@ def simple_basemap(bbox, proj='merc', resolution='i', ax=None,
     return m
 
 
-def draw_hways(basemap, color='red', linewidth=0.33):
+def draw_hways(basemap, color='red', linewidth=0.33, ax=None):
     basemap.readshapefile(get_resource('hways/hways'), 'hways', drawbounds=True,
-                          color=color, linewidth=linewidth)
+                          color=color, linewidth=linewidth, ax=ax)
 
 
 class LegendBuilder(object):

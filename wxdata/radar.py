@@ -119,7 +119,7 @@ _DEFAULT_BOUNDS = {
 def plot_level2(file_or_radar, field='reflectivity', sweep=0, bounds=None, resolution='i',
                 zoom_km=None, shift_latlon=(0, 0), ctr_latlon=None, bbox=(None, None, None, None),
                 map_layers=('states', 'counties', 'highways'),
-                debug=False, ax=None):
+                debug=False, basemap=None, ax=None):
     import pyart
     if isinstance(file_or_radar, pyart.core.Radar):
         radarsample = file_or_radar
@@ -129,29 +129,43 @@ def plot_level2(file_or_radar, field='reflectivity', sweep=0, bounds=None, resol
     display = pyart.graph.RadarMapDisplay(radarsample)
     vmin, vmax = bounds if bounds is not None else _DEFAULT_BOUNDS.get(field, (None, None))
 
-    if zoom_km is not None:
-        log_if_debug('Radar location: {}, shift: {}'.format(display.loc, shift_latlon), debug)
+    if basemap is not None:
+        geog_kw = dict(basemap=basemap)
+    elif zoom_km is not None:
         if ctr_latlon is None:
+            log_if_debug('Center: {}, shift: {}'.format(display.loc, shift_latlon), debug)
             latctr, lonctr = tuple(map(sum, zip(display.loc, shift_latlon)))
         else:
+            log_if_debug('Center: {}, shift: {}'.format(ctr_latlon, (0, 0)), debug)
             latctr, lonctr = ctr_latlon
 
         if isinstance(zoom_km, int):
             zoom_km = (zoom_km, zoom_km)
-        bbox = geog.bbox_zoom((latctr, lonctr), km_x=zoom_km[0], km_y=zoom_km[1])
-        log_if_debug('BBox: {}'.format(bbox), debug)
 
-    lon0, lon1, lat0, lat1 = bbox
+        zoomwidth, zoomheight = zoom_km
+        geog_kw = dict(width=zoomwidth * 2 * 1000, height=zoomheight * 2 * 1000,
+                       lon_0=lonctr, lat_0=latctr)
+        log_if_debug('width: {}, height: {}'.format(geog_kw['width'], geog_kw['height']))
+    else:
+        lon0, lon1, lat0, lat1 = bbox
+        geog_kw = dict(min_lon=lon0, min_lat=lat0, max_lon=lon1, max_lat=lat1)
+
+    if ax is not None and basemap is not None:
+        # this is a hack to account for pyart's `plot_ppi_map` method always plotting
+        # on the basemap's axes instance instead of the custom axes instance
+        basemap.ax = ax
+
     display.plot_ppi_map(field, sweep=sweep, title_flag=False,
-                         min_lon=lon0, min_lat=lat0, max_lon=lon1, max_lat=lat1,
                          vmin=vmin, vmax=vmax, resolution=resolution,
-                         embelish=False, colorbar_flag=False, ax=ax)
+                         embelish=False, colorbar_flag=False, ax=ax,
+                         **geog_kw)
 
+    basemap_draw_on = basemap if basemap is not None else display.basemap
     if 'states' in map_layers:
-        display.basemap.drawstates()
+        basemap_draw_on.drawstates(ax=ax)
     if 'counties' in map_layers:
-        display.basemap.drawcounties()
+        basemap_draw_on.drawcounties(ax=ax)
     if 'highways' in map_layers:
-        draw_hways(display.basemap)
+        draw_hways(basemap_draw_on, ax=ax)
 
     return radarsample, display
