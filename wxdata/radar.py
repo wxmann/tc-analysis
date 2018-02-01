@@ -2,6 +2,7 @@ import os
 import re
 
 from boto.s3.connection import S3Connection
+import pyart
 
 from datetime import datetime, timedelta
 
@@ -9,10 +10,11 @@ from wxdata import workdir
 from wxdata.plotting import draw_hways
 from wxdata.utils import log_if_debug
 
-__all__ = ['OrderLevel2', 'OrderSelection', 'timestamp_from_key', 'plot_level2']
+__all__ = ['Level2Archive', 'OrderSelection', 'timestamp_from_key',
+           'plot_reflectivity', 'plot_velocity', 'plot_default_display']
 
 
-class OrderLevel2(object):
+class Level2Archive(object):
     def __init__(self):
         self._conn = S3Connection(anon=True)
         self._bucket = self._conn.get_bucket('noaa-nexrad-level2')
@@ -97,7 +99,7 @@ class OrderSelection(object):
 
     def download(self, dest=None, overwrite=False):
         if dest is None:
-            dest = os.path.join(workdir.get(), 'radar')
+            dest = workdir.subdir('radar')
 
         downloaded_files = []
         for key in self._keys:
@@ -115,7 +117,6 @@ _DEFAULT_BOUNDS = {
     'reflectivity': (0, 75)
 }
 
-
 _OVERRIDE_DEFAULT_CM = {
     'velocity': 'pyart_NWSVel',
     'corrected_velocity': 'pyart_NWSVel',
@@ -123,18 +124,40 @@ _OVERRIDE_DEFAULT_CM = {
 }
 
 
-def plot_level2(file_or_radar, field='reflectivity', sweep=0, bounds=None, resolution='i',
-                zoom_km=None, shift_latlon=(0, 0), ctr_latlon=None, bbox=(None, None, None, None),
-                cmap=None, map_layers=('states', 'counties', 'highways'),
-                debug=False, basemap=None, ax=None):
-    import pyart
+def get_radar_and_display(file_or_radar):
     if isinstance(file_or_radar, pyart.core.Radar):
-        radarsample = file_or_radar
+        sample = file_or_radar
     else:
-        radarsample = pyart.io.read_nexrad_archive(file_or_radar)
+        sample = pyart.io.read_nexrad_archive(file_or_radar)
 
-    display = pyart.graph.RadarMapDisplay(radarsample)
-    vmin, vmax = bounds if bounds is not None else _DEFAULT_BOUNDS.get(field, (None, None))
+    display = pyart.graph.RadarMapDisplay(sample)
+    return sample, display
+
+
+def plot_reflectivity(file_or_radar, sweep=0, **plot_kw):
+    radarsample, display = get_radar_and_display(file_or_radar)
+    plot_default_display(display, 'reflectivity', sweep, **plot_kw)
+    return radarsample, display
+
+
+def plot_velocity(file_or_radar, sweep=1, correct=True, **plot_kw):
+    radarsample, display = get_radar_and_display(file_or_radar)
+    if correct:
+        dealiased = pyart.correct.dealias_region_based(radarsample, keep_original=True)
+        radarsample.add_field('corrected_velocity', dealiased, replace_existing=True)
+        plot_default_display(display, 'corrected_velocity', sweep, **plot_kw)
+    else:
+        plot_default_display(display, 'velocity', sweep, **plot_kw)
+    return radarsample, display
+
+
+def plot_default_display(display, field, sweep, vbounds=None, resolution='i',
+                         zoom_km=None, shift_latlon=(0, 0), ctr_latlon=None,
+                         bbox=(None, None, None, None),
+                         map_layers=('coastlines', 'countries', 'states', 'counties', 'highways'),
+                         cmap=None, debug=False, basemap=None, ax=None):
+
+    vmin, vmax = vbounds if vbounds is not None else _DEFAULT_BOUNDS.get(field, (None, None))
     cmap = cmap if cmap is not None else _OVERRIDE_DEFAULT_CM.get(field, None)
 
     if basemap is not None:
@@ -167,11 +190,13 @@ def plot_level2(file_or_radar, field='reflectivity', sweep=0, bounds=None, resol
                          embelish=False, colorbar_flag=False, ax=ax,
                          **geog_kw)
 
+    if 'coastlines' in map_layers:
+        display.basemap.drawcoastlines(ax=ax)
+    if 'countries' in map_layers:
+        display.basemap.drawcountries(ax=ax)
     if 'states' in map_layers:
         display.basemap.drawstates(ax=ax)
     if 'counties' in map_layers:
         display.basemap.drawcounties(ax=ax)
     if 'highways' in map_layers:
         draw_hways(display.basemap, ax=ax)
-
-    return radarsample, display

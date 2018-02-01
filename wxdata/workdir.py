@@ -1,4 +1,7 @@
 import os
+
+import errno
+
 try:
     from urlparse import urlparse
 except ImportError:
@@ -25,6 +28,16 @@ def get():
         raise WorkDirectoryException('Work directory must be a valid directory!')
 
     return workdir
+
+
+def subdir(name):
+    path = os.path.join(get(), name)
+    try:
+        os.makedirs(path)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+    return path
 
 
 def setto(directory):
