@@ -116,9 +116,16 @@ _DEFAULT_BOUNDS = {
 }
 
 
+_OVERRIDE_DEFAULT_CM = {
+    'velocity': 'pyart_NWSVel',
+    'corrected_velocity': 'pyart_NWSVel',
+    'simulated_velocity': 'pyart_NWSVel'
+}
+
+
 def plot_level2(file_or_radar, field='reflectivity', sweep=0, bounds=None, resolution='i',
                 zoom_km=None, shift_latlon=(0, 0), ctr_latlon=None, bbox=(None, None, None, None),
-                map_layers=('states', 'counties', 'highways'),
+                cmap=None, map_layers=('states', 'counties', 'highways'),
                 debug=False, basemap=None, ax=None):
     import pyart
     if isinstance(file_or_radar, pyart.core.Radar):
@@ -128,9 +135,14 @@ def plot_level2(file_or_radar, field='reflectivity', sweep=0, bounds=None, resol
 
     display = pyart.graph.RadarMapDisplay(radarsample)
     vmin, vmax = bounds if bounds is not None else _DEFAULT_BOUNDS.get(field, (None, None))
+    cmap = cmap if cmap is not None else _OVERRIDE_DEFAULT_CM.get(field, None)
 
     if basemap is not None:
         geog_kw = dict(basemap=basemap)
+        if ax is not None:
+            # this is a hack to account for pyart's `plot_ppi_map` method always plotting
+            # on the basemap's axes instance instead of the custom axes instance
+            basemap.ax = ax
     elif zoom_km is not None:
         if ctr_latlon is None:
             log_if_debug('Center: {}, shift: {}'.format(display.loc, shift_latlon), debug)
@@ -150,12 +162,7 @@ def plot_level2(file_or_radar, field='reflectivity', sweep=0, bounds=None, resol
         lon0, lon1, lat0, lat1 = bbox
         geog_kw = dict(min_lon=lon0, min_lat=lat0, max_lon=lon1, max_lat=lat1)
 
-    if ax is not None and basemap is not None:
-        # this is a hack to account for pyart's `plot_ppi_map` method always plotting
-        # on the basemap's axes instance instead of the custom axes instance
-        basemap.ax = ax
-
-    display.plot_ppi_map(field, sweep=sweep, title_flag=False,
+    display.plot_ppi_map(field, sweep=sweep, title_flag=False, cmap=cmap,
                          vmin=vmin, vmax=vmax, resolution=resolution,
                          embelish=False, colorbar_flag=False, ax=ax,
                          **geog_kw)
