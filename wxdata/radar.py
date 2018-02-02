@@ -118,7 +118,12 @@ class OrderSelection(object):
             targ = os.path.join(dest, filename)
 
             if overwrite or not os.path.isfile(targ):
-                key.get_contents_to_filename(targ)
+                try:
+                    key.get_contents_to_filename(targ)
+                except Exception:
+                    import warnings
+                    warnings.warn('Failed to save key: {} to disk: {}'.format(key.name, targ))
+                    continue
 
             downloaded_files.append(targ)
         return downloaded_files

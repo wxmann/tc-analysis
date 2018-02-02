@@ -4,7 +4,7 @@ import xarray as xr
 from datetime import timedelta
 import multiprocessing as mp
 
-from wxdata.common import tds_dataset_url
+from wxdata.http import tds_dataset_url
 
 CFSR_PARENT = 'https://www.ncei.noaa.gov/thredds/catalog'
 

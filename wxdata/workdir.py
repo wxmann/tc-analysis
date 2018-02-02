@@ -7,7 +7,7 @@ try:
 except ImportError:
     from urllib.parse import urlparse
 
-from wxdata.common import saveall
+from wxdata.http import saveall
 
 VAR = 'WORKDIR'
 

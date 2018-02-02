@@ -5,7 +5,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-from wxdata.common import (
+from wxdata.http import (
     DataRetrievalException, get_links, iter_text_lines, column_definition
 )
 

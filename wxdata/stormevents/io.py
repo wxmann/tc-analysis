@@ -7,7 +7,7 @@ from itertools import product
 import pandas as pd
 import six
 
-from wxdata.common import get_links, DataRetrievalException
+from wxdata.http import get_links, DataRetrievalException
 from wxdata.stormevents.temporal import convert_df_tz, localize_timestamp_tz, convert_timestamp_tz
 from wxdata.workdir import bulksave
 
