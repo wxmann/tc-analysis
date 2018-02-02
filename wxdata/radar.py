@@ -1,7 +1,9 @@
 import os
 import re
+from functools import lru_cache
 
 from boto.s3.connection import S3Connection
+import numpy as np
 import pyart
 
 from datetime import datetime, timedelta
@@ -20,22 +22,46 @@ class Level2Archive(object):
         self._bucket = self._conn.get_bucket('noaa-nexrad-level2')
 
     def select_around(self, station, timestamp, dt=timedelta(minutes=3), debug=False):
-        if isinstance(timestamp, str):
-            timestamp = datetime.strptime(timestamp, '%Y-%m-%d %H:%M')
+        timestamp = np.datetime64(timestamp)
 
         if isinstance(dt, int):
-            dt = timedelta(minutes=dt)
+            dt = np.timedelta64(dt, 'm')
+        else:
+            dt = np.timedelta64(dt)
 
         min_time = timestamp - dt
         max_time = timestamp + dt
+        log_if_debug('Time range considered between {} and {}'.format(min_time, max_time), debug)
+
+        return self.select_between(station, min_time, max_time, debug)
+
+    def select_between(self, station, t1, t2, debug=False, _cache=True):
+        t1 = np.datetime64(t1)
+        t2 = np.datetime64(t2)
+
+        if t1 >= t2:
+            raise ValueError('t1 must be less than t2')
+        if t2 - t1 > np.timedelta64(24, 'h'):
+            raise ValueError('Queries for time ranges longer than 24h are disallowed.')
+
+        # The Level 2 archive in AWS updates real-time. We want to bypass cached results for
+        # queries close to today.
+        if t2 > datetime.today() - timedelta(days=1) or debug or not _cache:
+            return self._select_between_impl(station, t1, t2, debug)
+        return self._select_between_with_caching(station, t1, t2)
+
+    @lru_cache(maxsize=50)
+    def _select_between_with_caching(self, station, t1, t2):
+        return self._select_between_impl(station, t1, t2)
+
+    def _select_between_impl(self, station, t1, t2, debug=False):
+        one_hr = np.timedelta64(1, 'h')
+        querytimes = np.arange(t1, t2 + one_hr, one_hr)
 
         keys = []
-        querytimes = (min_time,) if min_time.hour == max_time.hour else (min_time, max_time)
-        log_if_debug('Time range considered: {}'.format(querytimes), debug)
-
         for querytime in querytimes:
             prefix = '{dt:%Y}/{dt:%m}/{dt:%d}/{st}/{st}{dt:%Y%m%d_%H}'.format(
-                dt=querytime, st=station)
+                dt=querytime.astype(datetime), st=station)
 
             for key in self._bucket.list(prefix=prefix):
                 try:
@@ -44,10 +70,7 @@ class Level2Archive(object):
                     print(str(e))
                     continue
 
-                t_hi = max(key_datetime, timestamp)
-                t_lo = key_datetime if t_hi is timestamp else timestamp
-
-                if t_hi - t_lo < dt:
+                if t1 <= key_datetime < t2:
                     log_if_debug('Found key: {}'.format(key.name), debug)
                     keys.append(key)
                 else:
@@ -55,25 +78,13 @@ class Level2Archive(object):
 
         return OrderSelection(keys)
 
-    def select_hours(self, station, order_date, from_hr=0, to_hr=24):
-        if isinstance(order_date, str):
-            order_date = datetime.strptime(order_date, '%Y-%m-%d')
 
-        keys = []
-        for hr in range(from_hr, to_hr):
-            prefix = '{dt:%Y}/{dt:%m}/{dt:%d}/{st}/{st}{dt:%Y%m%d}_{hr}'.format(
-                dt=order_date, st=station, hr=str(hr).zfill(2))
-            keys += list(self._bucket.list(prefix=prefix))
-
-        return OrderSelection(keys)
-
-
-DT_REGEX = r'\d{8}_\d{6}'
+_DT_REGEX = r'\d{8}_\d{6}'
 
 
 def timestamp_from_filename(filename):
     # e.g. KVNX20120414_192456
-    found_datetime = re.search(DT_REGEX, filename)
+    found_datetime = re.search(_DT_REGEX, filename)
     if found_datetime:
         return datetime.strptime(found_datetime.group(0), '%Y%m%d_%H%M%S')
     else:
@@ -114,13 +125,14 @@ class OrderSelection(object):
 
 
 _DEFAULT_BOUNDS = {
-    'reflectivity': (0, 75)
+    'reflectivity': (0, 75),
+    'velocity': (-50, 50),
+    'corrected_velocity': (-50, 50),
 }
 
 _OVERRIDE_DEFAULT_CM = {
     'velocity': 'pyart_NWSVel',
     'corrected_velocity': 'pyart_NWSVel',
-    'simulated_velocity': 'pyart_NWSVel'
 }
 
 
