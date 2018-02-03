@@ -1,13 +1,11 @@
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
-import matplotlib.dates as dates
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-from mpl_toolkits.basemap import Basemap
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from mpl_toolkits.basemap import Basemap
 
 from wxdata.config import get_resource
 
@@ -56,50 +54,6 @@ def plot_cities(city_coordinates, basemap,
 
         labelx, labely = basemap(coords[1] + dx, coords[0] + dy)
         plt.text(labelx, labely, city, fontsize=labelsize, color=color, alpha=alpha)
-
-
-def hovmoller_with_map(xrdata, map_bbox, figsize=(12, 16), plot_map_ratio=(6, 1),
-                       ylabelsize='x-large', xlabelsize='medium', dayinterval=2, xtickinterval=60,
-                       grid=True, datefrmt='%b %-d', grid_kw=None, plotfunc=None, plot_kw=None):
-    # setup the subplot layout
-    fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=figsize,
-                                   gridspec_kw=dict(height_ratios=list(plot_map_ratio)))
-    plt.tight_layout()
-
-    # setup the plotting from the data
-    if not plotfunc:
-        plotfunc = xrdata.plot.contourf
-    if not plot_kw:
-        plot_kw = dict(center=0, levels=20, yincrease=False)
-
-    for fixed_kw in ('ax', 'add_colorbar', 'add_labels'):
-        if fixed_kw in plot_kw:
-            plot_kw.pop(fixed_kw)
-
-    mappable = plotfunc(ax=ax1, add_colorbar=False, add_labels=False, **plot_kw)
-
-    # map
-    basemap = simple_basemap(map_bbox, proj='cyl', resolution='l', ax=ax2, us_detail=False)
-
-    # gridlines and ticks
-
-    if grid:
-        if grid_kw is None:
-            grid_kw = dict(color='k', linestyle='-.', linewidth=1, alpha=0.25)
-        ax1.grid(**grid_kw)
-        ax2.grid(**grid_kw)
-
-    ax1.tick_params(labelsize=ylabelsize)
-    if xlabelsize:
-        ax2.tick_params(labelsize=xlabelsize)
-
-    lon0, lon1 = map_bbox[:2]
-    ax1.xaxis.set_ticks(np.arange(lon0, lon1, xtickinterval))
-    ax1.yaxis.set_major_locator(dates.DayLocator(interval=dayinterval))
-    ax1.yaxis.set_major_formatter(dates.DateFormatter(datefrmt))
-
-    axes = (ax1, ax2)
-    return fig, axes, mappable, basemap
 
 
 def bottom_right_textbox(ax, text, fontsize=16):
