@@ -11,7 +11,7 @@ from sklearn.metrics import pairwise_distances
 from wxdata.plotting import plot_points
 from wxdata.stormevents.tornprocessing import discretize, ef, longevity
 
-__all__ = ['st_clusters', 'legend_labels', 'plot_clusters', 'assert_clusters_equal', 'NOISE_LABEL']
+__all__ = ['st_clusters', 'plot_clusters', 'assert_clusters_equal']
 
 NOISE_LABEL = -1
 

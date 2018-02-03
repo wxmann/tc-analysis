@@ -1,28 +1,17 @@
-import os
 from itertools import product
 from unittest import mock
 
 import numpy as np
 import pandas as pd
 import pytz
-from pandas.util.testing import assert_frame_equal, assert_series_equal
+from pandas.util.testing import assert_series_equal
 
 from wxdata import stormevents, workdir
 from wxdata.stormevents import urls_for, convert_timestamp_tz, localize_timestamp_tz
-from wxdata.stormevents.clusters import Cluster, assert_clusters_equal
-from wxdata import _timezones as _tz
+from wxdata.testing import resource_path, open_resource, assert_frame_eq_ignoring_dtypes
 
 
-def resource_path(filename):
-    this_dir = os.path.dirname(os.path.realpath(__file__))
-    return os.path.join(this_dir, 'resources', filename)
-
-
-def open_resource(filename, *args, **kwargs):
-    return open(resource_path(filename), *args, **kwargs)
-
-
-@mock.patch('wxdata.common.requests')
+@mock.patch('wxdata.http.requests')
 def test_urls_for(req):
     response = mock.MagicMock()
     req.get.return_value = response
@@ -107,7 +96,7 @@ def test_convert_df_timezone(latlontz):
 
     expected_df = stormevents.load_file(resource_path('stormevents_mixed_tzs_togmt.csv'), tz_localize=True)
     converted_src_df = stormevents.convert_df_tz(src_df, 'GMT')
-    _assert_frame_eq_ignoring_dtypes(converted_src_df, expected_df)
+    assert_frame_eq_ignoring_dtypes(converted_src_df, expected_df)
 
 
 @mock.patch('wxdata._timezones.tz_for_latlon')
@@ -127,7 +116,7 @@ def test_convert_df_timezone_multiple_times(latlontz):
     expected_df = stormevents.load_file(resource_path('stormevents_mixed_tzs_togmt.csv'), tz_localize=True)
     intermed = stormevents.convert_df_tz(src_df, 'CST')
     converted_src_df = stormevents.convert_df_tz(intermed, 'GMT')
-    _assert_frame_eq_ignoring_dtypes(converted_src_df, expected_df)
+    assert_frame_eq_ignoring_dtypes(converted_src_df, expected_df)
 
 
 def test_filter_df_stormtype():
@@ -150,7 +139,7 @@ def test_filter_df_state():
     assert len(states[states.state == 'NO']) == 0
 
 
-@mock.patch('wxdata.common.get_links', return_value=(
+@mock.patch('wxdata.http.get_links', return_value=(
         'StormEvents_details-ftp_v1.0_d1990_c20170717.csv.gz',
         'StormEvents_details-ftp_v1.0_d1991_c20170717.csv.gz',
         'StormEvents_details-ftp_v1.0_d1992_c20170717.csv.gz',
@@ -161,10 +150,10 @@ def test_load_multiple_years_storm_data(reqpatch):
                                  states=['Texas', 'Oklahoma', 'Kansas'])
 
     df_expected = stormevents.load_file(resource_path('multiyear_storm_events_expected.csv'))
-    _assert_frame_eq_ignoring_dtypes(df, df_expected)
+    assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
-@mock.patch('wxdata.common.get_links', return_value=(
+@mock.patch('wxdata.http.get_links', return_value=(
         'StormEvents_details-ftp_v1.0_d1990_c20170717.csv.gz',
         'StormEvents_details-ftp_v1.0_d1991_c20170717.csv.gz',
         'StormEvents_details-ftp_v1.0_d1992_c20170717.csv.gz',
@@ -176,10 +165,10 @@ def test_load_multiple_years_storm_data_localize_to_tz(reqpatch):
 
     df_expected = stormevents.load_file(resource_path('multiyear_storm_events_EST_expected.csv'),
                                         tz_localize=True)
-    _assert_frame_eq_ignoring_dtypes(df, df_expected)
+    assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
-@mock.patch('wxdata.common.get_links', return_value=(
+@mock.patch('wxdata.http.get_links', return_value=(
         'StormEvents_details-ftp_v1.0_d1991_c20170717.csv.gz',
 ))
 def test_load_two_days_storm_data_localize_to_tz(reqpatch):
@@ -188,7 +177,7 @@ def test_load_two_days_storm_data_localize_to_tz(reqpatch):
 
     df_expected = stormevents.load_file(resource_path('two_day_stormevents_UTC_expected.csv'),
                                         tz_localize=True)
-    _assert_frame_eq_ignoring_dtypes(df, df_expected)
+    assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
 def test_correct_tornado_times():
@@ -196,7 +185,7 @@ def test_correct_tornado_times():
     df = stormevents.tors.correct_tornado_times(df)
 
     df_expected = stormevents.load_file(resource_path('stormevents_bad_times_corrected.csv'))
-    _assert_frame_eq_ignoring_dtypes(df, df_expected)
+    assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
 def test_after_tz_conversion_correct_tornado_times():
@@ -205,7 +194,7 @@ def test_after_tz_conversion_correct_tornado_times():
 
     df_expected = stormevents.load_file(resource_path('stormevents_bad_times_GMT_corrected.csv'),
                                         tz_localize=True)
-    _assert_frame_eq_ignoring_dtypes(df, df_expected)
+    assert_frame_eq_ignoring_dtypes(df, df_expected)
 
 
 def test_get_longevity():
@@ -314,50 +303,3 @@ def test_discretize_tor():
     assert extrapt['timestamp'] == tor3['begin_date_time'].tz_localize('Etc/GMT+6')
     assert extrapt['lat'] == tor3['begin_lat']
     assert extrapt['lon'] == tor3['begin_lon']
-
-
-def test_find_st_clusters():
-    df = stormevents.load_file(resource_path('120414_tornadoes.csv'), tz_localize=True)
-
-    expected_torclusters = []
-    expected_outliers = pd.DataFrame()
-
-    clusterfile_dir = resource_path('120414_clusters')
-    for clusterfile in os.listdir(clusterfile_dir):
-        clusterfile = os.path.join(clusterfile_dir, clusterfile)
-        clusterpts = pd.read_csv(clusterfile, parse_dates=['timestamp'])
-        # hard-code this for now
-        clusterpts['timestamp'] = clusterpts.apply(
-            lambda r: r['timestamp'].tz_localize('GMT').tz_convert(_tz.parse_tz('CST')), axis=1)
-        cluster_num = clusterpts.loc[0, 'cluster']
-        cluster = Cluster(cluster_num, clusterpts, df)
-
-        if cluster_num == stormevents.clust.NOISE_LABEL:
-            expected_outliers = cluster
-        else:
-            expected_torclusters.append(cluster)
-
-    expected_torclusters = sorted(expected_torclusters,
-                                  key=lambda cl: (cl.begin_time, cl.end_time, len(cl)))
-
-    result = stormevents.clust.st_clusters(df, 60, 60, 15)
-    actual_torclusters = result.clusters
-    actual_outliers = result.noise
-
-    actual_torclusters = sorted(actual_torclusters,
-                                key=lambda cl: (cl.begin_time, cl.end_time, len(cl)))
-
-    assert len(expected_torclusters) == len(actual_torclusters)
-    assert_clusters_equal(actual_outliers, expected_outliers)
-    for actual, expected in zip(actual_torclusters, expected_torclusters):
-        assert_clusters_equal(actual, expected)
-
-
-def _assert_frame_eq_ignoring_dtypes(df1, df2,
-                                     dt_columns=('begin_date_time', 'end_date_time')):
-    assert_frame_equal(df1, df2, check_dtype=False)
-    # the assert_frame_equal function doesn't work with localized vs. naive timestamps.
-    # so we need to do another check for datetime columns
-    for col in dt_columns:
-        if col in df1.columns:
-            assert df1[col].equals(df2[col])
