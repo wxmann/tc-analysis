@@ -192,7 +192,7 @@ def plot_default_display(display, field, sweep, vbounds=None, resolution='i',
             log_if_debug('Center: {}, shift: {}'.format(ctr_latlon, (0, 0)), debug)
             latctr, lonctr = ctr_latlon
 
-        if isinstance(zoom_km, int):
+        if not isinstance(zoom_km, (list, tuple)):
             zoom_km = (zoom_km, zoom_km)
 
         zoomwidth, zoomheight = zoom_km

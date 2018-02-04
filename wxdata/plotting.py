@@ -92,8 +92,8 @@ def plot_cities(city_coordinates, basemap,
 
 def plot_cities_with_geocodor(cities, basemap, geocodor=None, label_transform=None,
                               color='k', marker='+', markersize=9, labelsize=12,
-                              alpha=0.6, dx=0.05, dy=-0.15, patheffect=None, **kw):
-
+                              alpha=0.6, dx=0.05, dy=-0.15, patheffect=None,
+                              **kw):
     if label_transform is None:
         label_transform = lambda city: city.split(',')[0].strip().upper()
 
@@ -109,6 +109,10 @@ def plot_cities_with_geocodor(cities, basemap, geocodor=None, label_transform=No
 
         labelx, labely = basemap(coords[1] + dx, coords[0] + dy)
         label = label_transform(city)
+
+        # TODO: figure out how to add labels for specific axes
+        # Currently fails with `AttributeError: Unknown property ax` if you try to
+        # do ax.text(...)
         plt.text(labelx, labely, label, fontsize=labelsize, color=color, alpha=alpha,
                  path_effects=patheffect, clip_on=True, **kw)
 
