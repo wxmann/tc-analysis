@@ -6,7 +6,7 @@ from wxdata.plotting import sample_colors, plot_lines
 from wxdata.stormevents.temporal import sync_datetime_fields, localize_timestamp_tz
 
 __all__ = ['longevity', 'ef', 'speed_mph', 'correct_tornado_times',
-           'discretize', 'discretize_tor']
+           'discretize', 'discretize_tor', 'plot_tornadoes', 'plot_time_progression']
 
 _ONE_DAY = pd.Timedelta(days=1)
 _ONE_HOUR = pd.Timedelta(hours=1)
@@ -140,7 +140,15 @@ def plot_tornadoes(tordf, basemap, color='gray', patheffect=None, **kwargs):
         if event.event_type == 'Tornado':
             pt1 = [event.begin_lat, event.begin_lon]
             pt2 = [event.end_lat, event.end_lon]
-            plot_lines(np.array([pt1, pt2]), basemap, color, patheffect, **kwargs)
+            if pt1 == pt2:
+                # the `plot_lines` function uses the shape of the array as a cue
+                # to use a point or a line. We don't want to draw a line when there is
+                # is only one point in the tornado.
+                arr = np.array([pt1])
+            else:
+                arr = np.array([pt1, pt2])
+
+            plot_lines(arr, basemap, color, patheffect, **kwargs)
 
 
 def plot_time_progression(tordf, basemap, time_buckets, cmap='viridis',

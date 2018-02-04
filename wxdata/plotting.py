@@ -92,7 +92,7 @@ def plot_cities(city_coordinates, basemap,
 
 def plot_cities_with_geocodor(cities, basemap, geocodor=None, label_transform=None,
                               color='k', marker='+', markersize=9, labelsize=12,
-                              alpha=0.6, dx=0.05, dy=-0.15, patheffect=None):
+                              alpha=0.6, dx=0.05, dy=-0.15, patheffect=None, **kw):
 
     if label_transform is None:
         label_transform = lambda city: city.split(',')[0].strip().upper()
@@ -105,12 +105,12 @@ def plot_cities_with_geocodor(cities, basemap, geocodor=None, label_transform=No
         coords = find_latlon(city, geocodor)
         x, y = basemap(*reversed(coords))
         basemap.plot(x, y, marker, markersize=markersize, color=color, alpha=alpha,
-                     path_effects=patheffect)
+                     path_effects=patheffect, **kw)
 
         labelx, labely = basemap(coords[1] + dx, coords[0] + dy)
         label = label_transform(city)
         plt.text(labelx, labely, label, fontsize=labelsize, color=color, alpha=alpha,
-                 path_effects=patheffect)
+                 path_effects=patheffect, clip_on=True, **kw)
 
 
 def bottom_right_textbox(ax, text, fontsize=16):
@@ -164,7 +164,7 @@ def simple_basemap(bbox, proj='merc', resolution='i', ax=None,
     return m
 
 
-def draw_hways(basemap, color='red', linewidth=0.33, ax=None):
+def draw_hways(basemap, color='red', linewidth=0.5, ax=None):
     basemap.readshapefile(get_resource('hways/hways'), 'hways', drawbounds=True,
                           color=color, linewidth=linewidth, ax=ax)
 

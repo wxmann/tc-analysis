@@ -130,9 +130,9 @@ class OrderSelection(object):
 
 
 _DEFAULT_BOUNDS = {
-    'reflectivity': (0, 75),
-    'velocity': (-50, 50),
-    'corrected_velocity': (-50, 50),
+    'reflectivity': (5, 75),
+    'velocity': (-45, 45),
+    'corrected_velocity': (-45, 45),
 }
 
 _OVERRIDE_DEFAULT_CM = {
@@ -171,6 +171,7 @@ def plot_velocity(file_or_radar, sweep=1, correct=True, **plot_kw):
 def plot_default_display(display, field, sweep, vbounds=None, resolution='i',
                          zoom_km=None, shift_latlon=(0, 0), ctr_latlon=None,
                          bbox=(None, None, None, None),
+                         map_bg_color='white', map_layer_color='k',
                          map_layers=('coastlines', 'countries', 'states', 'counties', 'highways'),
                          cmap=None, debug=False, basemap=None, ax=None):
 
@@ -207,13 +208,14 @@ def plot_default_display(display, field, sweep, vbounds=None, resolution='i',
                          embelish=False, colorbar_flag=False, ax=ax,
                          **geog_kw)
 
+    display.basemap.drawmapboundary(fill_color=map_bg_color)
     if 'coastlines' in map_layers:
-        display.basemap.drawcoastlines(ax=ax)
+        display.basemap.drawcoastlines(ax=ax, color=map_layer_color)
     if 'countries' in map_layers:
-        display.basemap.drawcountries(ax=ax)
+        display.basemap.drawcountries(ax=ax, color=map_layer_color)
     if 'states' in map_layers:
-        display.basemap.drawstates(ax=ax)
+        display.basemap.drawstates(ax=ax, color=map_layer_color)
     if 'counties' in map_layers:
-        display.basemap.drawcounties(ax=ax)
+        display.basemap.drawcounties(ax=ax, color=map_layer_color, linewidth=0.15)
     if 'highways' in map_layers:
         draw_hways(display.basemap, ax=ax)
