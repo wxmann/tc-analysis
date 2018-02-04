@@ -8,9 +8,39 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from mpl_toolkits.basemap import Basemap
 
 from wxdata.config import get_resource
+from wxdata.utils import find_latlon
 
 
 # TODO: add tests for functions in this module!
+
+
+def plot_lines(latlons, basemap, color, patheffect, **kwargs):
+    if not latlons.any():
+        return
+    else:
+        use_kw = kwargs
+        if patheffect and 'path_effects' not in kwargs:
+            if not isinstance(patheffect, list):
+                use_kw['path_effects'] = [patheffect, path_effects.Normal()]
+            else:
+                use_kw['path_effects'] = patheffect
+
+        if latlons.shape[0] == 1:
+            # a line plot will cause a singular point to vanish, so we force it to
+            # plot points here
+            use_kw = use_kw.copy()
+            use_kw.pop('linestyle', None)
+            size = use_kw.pop('linewidth', None)
+            use_kw['marker'] = 'o'
+            use_kw['markersize'] = size
+
+        basemap.plot(latlons[:, 1], latlons[:, 0],
+                     color=color, latlon=True, **use_kw)
+
+
+## TODO: deprecate plot_points, plot_cities and plot_time_progression below,
+## they are in the tornprocessing module now
+
 
 def plot_points(pts, basemap, color='k', marker='o', markersize=2, **kwargs):
     if isinstance(pts, pd.DataFrame):
@@ -21,6 +51,7 @@ def plot_points(pts, basemap, color='k', marker='o', markersize=2, **kwargs):
     lons = latlons[:, 1]
     lats = latlons[:, 0]
     x, y = basemap(lons, lats)
+    # basemap.ax.plot(x, y, marker, markersize=markersize, color=color, **kwargs)
     basemap.plot(x, y, marker, markersize=markersize, color=color, **kwargs)
 
 
@@ -32,7 +63,7 @@ def plot_time_progression(pts, basemap, time_buckets, colormap,
     colors = sample_colors(len(buckets), colormap)
 
     for time_bucket_start, time_bucket_end in buckets:
-        hour_pts = pts[(pts.timestamp >= time_bucket_start) & (pts.timestamp < time_bucket_end)]
+        hour_pts = pts[(pts.timestamp >= time_bucket_start) & (pts.timestamp <= time_bucket_end)]
         color = next(colors)
         plot_points(hour_pts, basemap, color, marker=marker, markersize=markersize, **kwargs)
 
@@ -56,6 +87,31 @@ def plot_cities(city_coordinates, basemap,
         plt.text(labelx, labely, city, fontsize=labelsize, color=color, alpha=alpha)
 
 
+## END DEPRECATE
+
+
+def plot_cities_with_geocodor(cities, basemap, geocodor=None, label_transform=None,
+                              color='k', marker='+', markersize=9, labelsize=12,
+                              alpha=0.6, dx=0.05, dy=-0.15, patheffect=None):
+
+    if label_transform is None:
+        label_transform = lambda city: city.split(',')[0].strip().upper()
+
+    for city in cities:
+        coords = find_latlon(city, geocodor)
+        x, y = basemap(*reversed(coords))
+        basemap.plot(x, y, marker, markersize=markersize, color=color, alpha=alpha)
+
+        labelx, labely = basemap(coords[1] + dx, coords[0] + dy)
+        label = label_transform(city)
+
+        if patheffect is None:
+            patheffect = [path_effects.SimplePatchShadow(offset=(1, -1)),
+                          path_effects.Normal()]
+        plt.text(labelx, labely, label, fontsize=labelsize, color=color, alpha=alpha,
+                 path_effects=patheffect)
+
+
 def bottom_right_textbox(ax, text, fontsize=16):
     plt.text(0.99, 0.01, text, transform=ax.transAxes, fontsize=fontsize,
              verticalalignment='bottom', horizontalalignment='right',
@@ -71,6 +127,12 @@ def top_right_textbox(ax, text, fontsize=16):
 def top_left_textbox(ax, text, fontsize=16):
     plt.text(0.01, 0.99, text, transform=ax.transAxes, fontsize=fontsize,
              verticalalignment='top', horizontalalignment='left',
+             bbox=dict(alpha=0.75, facecolor='white', edgecolor='gray'))
+
+
+def bottom_left_textbox(ax, text, fontsize=16):
+    plt.text(0.01, 0.01, text, transform=ax.transAxes, fontsize=fontsize,
+             verticalalignment='bottom', horizontalalignment='left',
              bbox=dict(alpha=0.75, facecolor='white', edgecolor='gray'))
 
 
@@ -144,6 +206,8 @@ def inset_colorbar(mappable, ax, width='60%', height='3%', loc=1, tickcolor='k',
              path_effects=[text_shadow])
     if title:
         cbar.set_label(title, color=titlecolor, path_effects=[text_shadow], fontsize=titlesize)
+
+    return cbar, cbar_ax
 
 
 ## Color sampling

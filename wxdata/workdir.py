@@ -21,8 +21,7 @@ def get():
     if not workdir:
         raise WorkDirectoryException('Work directory must be set!')
 
-    if workdir[0] == '~':
-        workdir = os.path.expanduser(workdir)
+    workdir = os.path.expanduser(workdir)
 
     if not os.path.isdir(workdir):
         raise WorkDirectoryException('Work directory must be a valid directory!')
@@ -36,7 +35,7 @@ def subdir(name):
         os.makedirs(path)
     except OSError as e:
         if e.errno != errno.EEXIST:
-            raise
+            raise WorkDirectoryException(e)
     return path
 
 

@@ -2,9 +2,11 @@ import pandas as pd
 import numpy as np
 
 from wxdata import _timezones as _tz
+from wxdata.plotting import sample_colors, plot_lines
 from wxdata.stormevents.temporal import sync_datetime_fields, localize_timestamp_tz
 
-__all__ = ['longevity', 'ef', 'speed_mph', 'correct_tornado_times', 'discretize']
+__all__ = ['longevity', 'ef', 'speed_mph', 'correct_tornado_times',
+           'discretize', 'discretize_tor']
 
 _ONE_DAY = pd.Timedelta(days=1)
 _ONE_HOUR = pd.Timedelta(hours=1)
@@ -102,7 +104,7 @@ def discretize(df, spacing_min=1):
     return pd.concat(foreachtor, ignore_index=True)
 
 
-def discretize_tor(torn_seg, spacing_min=1):
+def discretize_tor(torn_seg, spacing_min=1, endpoint=False):
     elapsed_min = (torn_seg.end_date_time - torn_seg.begin_date_time) / pd.Timedelta('1 min')
     tzstr = torn_seg.cz_timezone
     slat, slon, elat, elon = torn_seg.begin_lat, torn_seg.begin_lon, torn_seg.end_lat, torn_seg.end_lon
@@ -111,8 +113,8 @@ def discretize_tor(torn_seg, spacing_min=1):
     if numpoints == 0:
         numpoints = 1
 
-    lat_space = np.linspace(slat, elat, numpoints, endpoint=False)
-    lon_space = np.linspace(slon, elon, numpoints, endpoint=False)
+    lat_space = np.linspace(slat, elat, numpoints, endpoint=endpoint)
+    lon_space = np.linspace(slon, elon, numpoints, endpoint=endpoint)
     latlons = np.vstack([lat_space, lon_space]).T
 
     t0 = torn_seg.begin_date_time
@@ -121,7 +123,7 @@ def discretize_tor(torn_seg, spacing_min=1):
     t0 = localize_timestamp_tz(t0, tzstr)
     t1 = localize_timestamp_tz(t1, tzstr)
 
-    time_space = np.linspace(t0.value, t1.value, numpoints, endpoint=False)
+    time_space = np.linspace(t0.value, t1.value, numpoints, endpoint=endpoint)
     times = pd.to_datetime(time_space)
 
     ret = pd.DataFrame(latlons, columns=['lat', 'lon'])
@@ -129,3 +131,43 @@ def discretize_tor(torn_seg, spacing_min=1):
     ret['timestamp'] = times.tz_localize('GMT').tz_convert(_tz.parse_tz(tzstr))
 
     return ret
+
+
+def plot_tornadoes(tordf, basemap, color='gray', patheffect=None, **kwargs):
+    assert isinstance(tordf, pd.DataFrame)
+
+    for _, event in tordf.iterrows():
+        if event.event_type == 'Tornado':
+            pt1 = [event.begin_lat, event.begin_lon]
+            pt2 = [event.end_lat, event.end_lon]
+            plot_lines(np.array([pt1, pt2]), basemap, color, patheffect, **kwargs)
+
+
+def plot_time_progression(tordf, basemap, time_buckets, cmap='viridis',
+                          patheffect=None, legend=None, legend_handle_func=None,
+                          **kwargs):
+
+    assert isinstance(tordf, pd.DataFrame)
+
+    buckets = list(time_buckets)
+    colors = sample_colors(len(buckets), cmap)
+
+    for _, event in tordf.iterrows():
+        if event.event_type == 'Tornado':
+            pts = discretize_tor(event, endpoint=True)
+
+            for index, (time_bucket_start, time_bucket_end) in enumerate(buckets):
+                bucket_pts = pts[(pts.timestamp >= time_bucket_start) & (pts.timestamp <= time_bucket_end)]
+                bucket_latlons = bucket_pts[['lat', 'lon']].as_matrix()
+                plot_lines(bucket_latlons, basemap, colors[index], patheffect, **kwargs)
+
+    if legend is not None:
+        for (time_bucket_start, time_bucket_end), color in zip(buckets, colors):
+            if legend_handle_func is None:
+                leg_label = '{} to {}'.format(time_bucket_start.strftime('%Y-%m-%d %H:%M'),
+                                              time_bucket_end.strftime('%Y-%m-%d %H:%M'))
+            else:
+                leg_label = legend_handle_func(time_bucket_start, time_bucket_end)
+            legend.append(color, leg_label, **kwargs)
+
+        legend.plot_legend()
