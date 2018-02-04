@@ -97,17 +97,18 @@ def plot_cities_with_geocodor(cities, basemap, geocodor=None, label_transform=No
     if label_transform is None:
         label_transform = lambda city: city.split(',')[0].strip().upper()
 
+    if patheffect is None:
+        patheffect = [path_effects.SimplePatchShadow(offset=(1, -1)),
+                      path_effects.Normal()]
+
     for city in cities:
         coords = find_latlon(city, geocodor)
         x, y = basemap(*reversed(coords))
-        basemap.plot(x, y, marker, markersize=markersize, color=color, alpha=alpha)
+        basemap.plot(x, y, marker, markersize=markersize, color=color, alpha=alpha,
+                     path_effects=patheffect)
 
         labelx, labely = basemap(coords[1] + dx, coords[0] + dy)
         label = label_transform(city)
-
-        if patheffect is None:
-            patheffect = [path_effects.SimplePatchShadow(offset=(1, -1)),
-                          path_effects.Normal()]
         plt.text(labelx, labely, label, fontsize=labelsize, color=color, alpha=alpha,
                  path_effects=patheffect)
 
