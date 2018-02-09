@@ -67,4 +67,7 @@ def find_latlon(loc, geocodor=None):
         geocodor = Nominatim()
 
     location = geocodor.geocode(loc)
+
+    if not location:
+        raise ValueError("Cannot find latlon for {}".format(loc))
     return location.latitude, location.longitude

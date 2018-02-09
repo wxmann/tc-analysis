@@ -157,10 +157,12 @@ def plot_reflectivity(file_or_radar, sweep=0, **plot_kw):
     return radarsample, display
 
 
-def plot_velocity(file_or_radar, sweep=1, correct=True, **plot_kw):
+def plot_velocity(file_or_radar, sweep=1, correct=True, dealias_kw=None, **plot_kw):
     radarsample, display = get_radar_and_display(file_or_radar)
     if correct:
-        dealiased = pyart.correct.dealias_region_based(radarsample, keep_original=True)
+        if dealias_kw is None:
+            dealias_kw = dict(keep_original=True)
+        dealiased = pyart.correct.dealias_region_based(radarsample, **dealias_kw)
         radarsample.add_field('corrected_velocity', dealiased, replace_existing=True)
         plot_default_display(display, 'corrected_velocity', sweep, **plot_kw)
     else:
