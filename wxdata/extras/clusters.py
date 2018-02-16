@@ -19,6 +19,9 @@ NOISE_LABEL = -1
 def st_clusters(events, eps_km, eps_min, min_samples, algorithm=None):
     assert min_samples > 0
 
+    if events.empty:
+        return ClusterGroup.empty()
+
     if algorithm == 'brute':
         cluster_dict = _brute_st_clusters(events, eps_km, eps_min, min_samples)
     else:
@@ -120,6 +123,11 @@ def _neighbors(df, spatial_dist, temporal_dist, index):
 
 
 class ClusterGroup(object):
+
+    @classmethod
+    def empty(cls):
+        return cls({})
+
     def __init__(self, cluster_dict):
         self._cluster_dict = cluster_dict
 

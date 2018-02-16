@@ -11,6 +11,11 @@ def diff(df1, df2):
 
 # TODO test
 def datetime_buckets(start_time, end_time, dt):
+    import pandas as pd
+    start_time = pd.Timestamp(start_time)
+    end_time = pd.Timestamp(end_time)
+    dt = pd.Timedelta(dt)
+
     start_bucket = start_time
     while start_bucket < end_time:
         end_bucket = start_bucket + dt
