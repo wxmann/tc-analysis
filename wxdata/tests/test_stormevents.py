@@ -1,14 +1,19 @@
 from itertools import product
 from unittest import mock
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pytest
 import pytz
 from pandas.util.testing import assert_series_equal
 
 from wxdata import stormevents, workdir
+from wxdata.plotting import simple_basemap, LegendBuilder
 from wxdata.stormevents import urls_for, convert_timestamp_tz, localize_timestamp_tz
+from wxdata.stormevents.tornprocessing import plot_time_progression, plot_tornadoes
 from wxdata.testing import resource_path, open_resource, assert_frame_eq_ignoring_dtypes
+from wxdata.utils import datetime_buckets
 
 
 @mock.patch('wxdata.http.requests')
@@ -303,3 +308,28 @@ def test_discretize_tor():
     assert extrapt['timestamp'] == tor3['begin_date_time'].tz_localize('Etc/GMT+6')
     assert extrapt['lat'] == tor3['begin_lat']
     assert extrapt['lon'] == tor3['begin_lon']
+
+
+@pytest.mark.mpl_image_compare(tolerance=10)
+def test_plot_tornadoes():
+    fig = plt.figure()
+    file = resource_path('120414_tornadoes.csv')
+    df = stormevents.load_file(file)
+    basemap = simple_basemap(proj='merc', bbox=(-105, -93, 35, 42), resolution='l',
+                             draw=('coastlines', 'countries', 'states'))
+    plot_tornadoes(df, basemap, linewidth=2, color='red')
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=10)
+def test_plot_time_progression():
+    fig = plt.figure()
+    file = resource_path('120414_tornadoes.csv')
+    df = stormevents.load_file(file)
+    basemap = simple_basemap(proj='merc', bbox=(-105, -93, 35, 42), resolution='l',
+                             draw=('coastlines', 'countries', 'states'))
+    buckets = datetime_buckets('2012-04-14 16:00', '2012-04-15 06:00', '30 min', tz='CST')
+    plot_time_progression(df, basemap, buckets, linewidth=2,
+                          legend=LegendBuilder(loc=2, fontsize=7, ncol=1),
+                          legend_handle_func=lambda a, b: '{} to {}'.format(a.strftime('%H:%M'), b.strftime('%H:%M')))
+    return fig

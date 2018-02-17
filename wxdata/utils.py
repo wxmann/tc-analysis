@@ -2,7 +2,7 @@ import os
 import shelve
 from functools import wraps
 
-from wxdata import workdir
+from wxdata import workdir, _timezones
 
 
 def diff(df1, df2):
@@ -10,11 +10,16 @@ def diff(df1, df2):
 
 
 # TODO test
-def datetime_buckets(start_time, end_time, dt):
+def datetime_buckets(start_time, end_time, dt, tz=None):
     import pandas as pd
     start_time = pd.Timestamp(start_time)
     end_time = pd.Timestamp(end_time)
     dt = pd.Timedelta(dt)
+
+    if tz:
+        tz = _timezones.parse_tz(tz)
+        start_time = start_time.tz_localize(tz)
+        end_time = end_time.tz_localize(tz)
 
     start_bucket = start_time
     while start_bucket < end_time:
