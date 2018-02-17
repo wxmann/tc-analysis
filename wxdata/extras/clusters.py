@@ -143,6 +143,9 @@ class ClusterGroup(object):
         else:
             return len(self._cluster_dict)
 
+    def __bool__(self):
+        return len(self) > 0
+
     @property
     def clusters(self):
         unordered = [clust for i, clust in self._cluster_dict.items() if i != NOISE_LABEL]

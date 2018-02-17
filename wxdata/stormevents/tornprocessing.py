@@ -160,22 +160,28 @@ def plot_time_progression(tordf, basemap, time_buckets, cmap='viridis',
     buckets = list(time_buckets)
     colors = sample_colors(len(buckets), cmap)
 
+    buckets_with_points = set()
+
     for _, event in tordf.iterrows():
         if event.event_type == 'Tornado':
             pts = discretize_tor(event, endpoint=True)
 
             for index, (time_bucket_start, time_bucket_end) in enumerate(buckets):
                 bucket_pts = pts[(pts.timestamp >= time_bucket_start) & (pts.timestamp <= time_bucket_end)]
-                bucket_latlons = bucket_pts[['lat', 'lon']].as_matrix()
-                plot_lines(bucket_latlons, basemap, colors[index], patheffect, **kwargs)
+
+                if not bucket_pts.empty:
+                    bucket_latlons = bucket_pts[['lat', 'lon']].as_matrix()
+                    plot_lines(bucket_latlons, basemap, colors[index], patheffect, **kwargs)
+                    buckets_with_points.add((time_bucket_start, time_bucket_end))
 
     if legend is not None:
         for (time_bucket_start, time_bucket_end), color in zip(buckets, colors):
-            if legend_handle_func is None:
-                leg_label = '{} to {}'.format(time_bucket_start.strftime('%Y-%m-%d %H:%M'),
-                                              time_bucket_end.strftime('%Y-%m-%d %H:%M'))
-            else:
-                leg_label = legend_handle_func(time_bucket_start, time_bucket_end)
-            legend.append(color, leg_label, **kwargs)
+            if (time_bucket_start, time_bucket_end) in buckets_with_points:
+                if legend_handle_func is None:
+                    leg_label = '{} to {}'.format(time_bucket_start.strftime('%Y-%m-%d %H:%M'),
+                                                  time_bucket_end.strftime('%Y-%m-%d %H:%M'))
+                else:
+                    leg_label = legend_handle_func(time_bucket_start, time_bucket_end)
+                legend.append(color, leg_label, **kwargs)
 
         legend.plot_legend()
