@@ -154,29 +154,18 @@ def plot_tornadoes(tordf, basemap, color='gray', patheffect=None, **kwargs):
 def plot_time_progression(tordf, basemap, time_buckets, cmap='viridis',
                           patheffect=None, legend=None, legend_handle_func=None,
                           **kwargs):
+    bucketed = bucket_events(tordf, time_buckets)
+    colors = sample_colors(len(bucketed), cmap)
 
-    assert isinstance(tordf, pd.DataFrame)
+    for bucket_range, color in zip(bucketed, colors):
+        bucketed_events = bucketed[bucket_range]
+        if bucketed_events:
+            for event in bucketed_events:
+                bucket_latlons = event[['lat', 'lon']].as_matrix()
+                plot_lines(bucket_latlons, basemap, color, patheffect, **kwargs)
 
-    buckets = list(time_buckets)
-    colors = sample_colors(len(buckets), cmap)
-
-    buckets_with_points = set()
-
-    for _, event in tordf.iterrows():
-        if event.event_type == 'Tornado':
-            pts = discretize_tor(event, endpoint=True)
-
-            for index, (time_bucket_start, time_bucket_end) in enumerate(buckets):
-                bucket_pts = pts[(pts.timestamp >= time_bucket_start) & (pts.timestamp <= time_bucket_end)]
-
-                if not bucket_pts.empty:
-                    bucket_latlons = bucket_pts[['lat', 'lon']].as_matrix()
-                    plot_lines(bucket_latlons, basemap, colors[index], patheffect, **kwargs)
-                    buckets_with_points.add((time_bucket_start, time_bucket_end))
-
-    if legend is not None:
-        for (time_bucket_start, time_bucket_end), color in zip(buckets, colors):
-            if (time_bucket_start, time_bucket_end) in buckets_with_points:
+            if legend is not None:
+                time_bucket_start, time_bucket_end = bucket_range
                 if legend_handle_func is None:
                     leg_label = '{} to {}'.format(time_bucket_start.strftime('%Y-%m-%d %H:%M'),
                                                   time_bucket_end.strftime('%Y-%m-%d %H:%M'))
@@ -184,4 +173,21 @@ def plot_time_progression(tordf, basemap, time_buckets, cmap='viridis',
                     leg_label = legend_handle_func(time_bucket_start, time_bucket_end)
                 legend.append(color, leg_label, **kwargs)
 
+    if legend is not None:
         legend.plot_legend()
+
+
+def bucket_events(df, timebuckets):
+    assert isinstance(df, pd.DataFrame)
+    bucketed = {bucket: [] for bucket in timebuckets}
+
+    for _, event in df.iterrows():
+        pts = discretize_tor(event, endpoint=True)
+
+        for index, bucket in enumerate(bucketed):
+            timebucket_start, timebucket_end = bucket
+            bucket_pts = pts[(pts.timestamp >= timebucket_start) & (pts.timestamp < timebucket_end)]
+
+            if not bucket_pts.empty:
+                bucketed[bucket].append(bucket_pts)
+    return bucketed

@@ -310,7 +310,7 @@ def test_discretize_tor():
     assert extrapt['lon'] == tor3['begin_lon']
 
 
-@pytest.mark.mpl_image_compare(tolerance=10)
+@pytest.mark.mpl_image_compare
 def test_plot_tornadoes():
     fig = plt.figure()
     file = resource_path('120414_tornadoes.csv')
@@ -321,15 +321,27 @@ def test_plot_tornadoes():
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=10)
+@pytest.mark.mpl_image_compare(tolerance=0.5)
 def test_plot_time_progression():
-    fig = plt.figure()
     file = resource_path('120414_tornadoes.csv')
     df = stormevents.load_file(file)
-    basemap = simple_basemap(proj='merc', bbox=(-105, -93, 35, 42), resolution='l',
-                             draw=('coastlines', 'countries', 'states'))
-    buckets = datetime_buckets('2012-04-14 16:00', '2012-04-15 06:00', '30 min', tz='CST')
-    plot_time_progression(df, basemap, buckets, linewidth=2,
-                          legend=LegendBuilder(loc=2, fontsize=7, ncol=1),
-                          legend_handle_func=lambda a, b: '{} to {}'.format(a.strftime('%H:%M'), b.strftime('%H:%M')))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True, figsize=(12, 7))
+    plt.tight_layout()
+
+    basemap1 = simple_basemap(proj='merc', bbox=(-105, -93, 35, 42), resolution='l',
+                              draw=('coastlines', 'countries', 'states'), ax=ax1)
+    basemap2 = simple_basemap(proj='merc', bbox=(-105, -93, 35, 42), resolution='l',
+                              draw=('coastlines', 'countries', 'states'), ax=ax2)
+    buckets1 = datetime_buckets('2012-04-14 16:00', '2012-04-15 06:00', '30 min', tz='CST')
+    # second image has overflow buckets
+    buckets2 = datetime_buckets('2012-04-14 14:00', '2012-04-15 10:00', '30 min', tz='CST')
+
+    legend_handle_func = lambda a, b: '{} to {}'.format(a.strftime('%H:%M'), b.strftime('%H:%M'))
+    plot_time_progression(df, basemap1, buckets1, linewidth=2,
+                          legend=LegendBuilder(loc=2, fontsize=6, ncol=1, ax=ax1),
+                          legend_handle_func=legend_handle_func)
+    plot_time_progression(df, basemap2, buckets2, linewidth=2,
+                          legend=LegendBuilder(loc=2, fontsize=6, ncol=1, ax=ax2),
+                          legend_handle_func=legend_handle_func)
     return fig

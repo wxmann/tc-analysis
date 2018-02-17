@@ -14,7 +14,7 @@ from wxdata.utils import find_latlon
 # TODO: add tests for functions in this module!
 
 
-def plot_lines(latlons, basemap, color, patheffect, **kwargs):
+def plot_lines(latlons, basemap, color, patheffect=None, **kwargs):
     if not latlons.any():
         return
     else:
@@ -30,9 +30,10 @@ def plot_lines(latlons, basemap, color, patheffect, **kwargs):
             # plot points here
             use_kw = use_kw.copy()
             use_kw.pop('linestyle', None)
-            size = use_kw.pop('linewidth', None)
+            size = use_kw.pop('linewidth', 2)
             use_kw['marker'] = 'o'
             use_kw['markersize'] = size
+            use_kw['markeredgewidth'] = 0.0
 
         basemap.plot(latlons[:, 1], latlons[:, 0],
                      color=color, latlon=True, **use_kw)
@@ -90,6 +91,7 @@ def plot_cities(city_coordinates, basemap,
 ## END DEPRECATE
 
 
+## TODO: remove the patheffect kw... it's redundant and sometimes I don't want a shadow
 def plot_cities_with_geocodor(cities, basemap, geocodor=None, label_transform=None,
                               color='k', marker='+', markersize=9, labelsize=12,
                               alpha=0.6, dx=0.05, dy=-0.15, patheffect=None,
@@ -174,15 +176,20 @@ def draw_hways(basemap, color='red', linewidth=0.5, ax=None):
 
 
 class LegendBuilder(object):
-    def __init__(self, **legend_kw):
+    def __init__(self, ax=None, **legend_kw):
         self.handles = []
+        self._ax = ax
         self.legend_kw = legend_kw
 
     def append(self, color, label, **kwargs):
         self.handles.append(mpatches.Patch(color=color, label=label, **kwargs))
 
+    @property
+    def ax(self):
+        return self._ax or plt.gca()
+
     def plot_legend(self):
-        plt.legend(handles=self.handles, **self.legend_kw)
+        self.ax.legend(handles=self.handles, **self.legend_kw)
 
 
 def draw_latlon_box(basemap, latlon_bbox, facecolor='none', edgecolor='red', linewidth=3, **kwargs):
@@ -235,16 +242,11 @@ class ColorSamples(object):
         return self.scalar_map.to_rgba(item)
 
     def __iter__(self):
-        return self
+        while self._iter_index < self.n_samples:
+            yield self.scalar_map.to_rgba(self._iter_index)
+            self._iter_index += 1
 
-    def __next__(self):
-        if self._iter_index >= self.n_samples:
-            raise StopIteration
-        ret = self.scalar_map.to_rgba(self._iter_index)
-        self._iter_index += 1
-        return ret
-
-    next = __next__
+        self._iter_index = 0
 
     def __len__(self):
         return self.n_samples
