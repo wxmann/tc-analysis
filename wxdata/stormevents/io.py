@@ -41,7 +41,7 @@ def _year_from_link(link):
                                      "CSV link: {}".format(link))
 
 
-def load_file(file, keep_data_start=None, keep_data_end=None,
+def load_file(file, keep_data_start=None, keep_data_end=None, months=None, hours=None,
               eventtypes=None, states=None, tz=None, tz_localize=False):
     df = pd.read_csv(file,
                      parse_dates=['BEGIN_DATE_TIME', 'END_DATE_TIME'],
@@ -75,6 +75,10 @@ def load_file(file, keep_data_start=None, keep_data_end=None,
         df = df[df.event_type.isin(eventtypes)]
     if states is not None:
         df = df[df.state.isin([state.upper() for state in states])]
+    if months is not None:
+        df = df[df.month_name.isin(months)]
+    if hours is not None:
+        df = df[pd.to_numeric(df.begin_time.str[:2]).isin(hours)]
 
     if keep_data_start and keep_data_end:
         if tz:
@@ -97,7 +101,9 @@ def load_file(file, keep_data_start=None, keep_data_end=None,
     return df
 
 
-def load_events(start, end, eventtypes=None, states=None, tz=None, debug=False):
+def load_events(start, end, eventtypes=None, states=None, months=None,
+                hours=None, tz=None, debug=False):
+
     if isinstance(start, six.string_types):
         start = pd.Timestamp(start)
     if isinstance(end, six.string_types):
@@ -119,11 +125,13 @@ def load_events(start, end, eventtypes=None, states=None, tz=None, debug=False):
     if year1 == year2:
         links = urls_for([year1])
         load_df_with_filter = partial(load_file, keep_data_start=start, keep_data_end=end,
-                                      eventtypes=eventtypes, states=states, tz=tz)
+                                      eventtypes=eventtypes, states=states, months=months,
+                                      hours=hours, tz=tz)
     else:
         links = urls_for(range(year1, year2 + 1))
         load_df_with_filter = partial(load_file, keep_data_start=None, keep_data_end=None,
-                                      eventtypes=eventtypes, states=states, tz=tz)
+                                      eventtypes=eventtypes, states=states, months=months,
+                                      hours=hours, tz=tz)
 
     results = bulksave(links, postsave=load_df_with_filter)
     dfs = [result.output for result in results if result.success and result.output is not None]
