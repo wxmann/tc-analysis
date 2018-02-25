@@ -5,7 +5,8 @@ import pandas as pd
 from wxdata import _timezones as _tzhelp
 
 __all__ = ['convert_df_tz', 'sync_datetime_fields',
-           'convert_timestamp_tz', 'localize_timestamp_tz']
+           'convert_timestamp_tz', 'localize_timestamp_tz',
+           'df_tz']
 
 
 def convert_df_tz(df, to_tz='CST', copy=True):
@@ -120,3 +121,14 @@ def sync_datetime_fields(df, tz=None):
         df['cz_timezone'] = tz
 
     return df
+
+
+def df_tz(df):
+    all_tzs = df.cz_timezone.unique()
+    if len(all_tzs) != 1:
+        raise MixedTimezoneException("DataFrame has mixed timezones: {}".format(all_tzs))
+    return all_tzs[0]
+
+
+class MixedTimezoneException(Exception):
+    pass

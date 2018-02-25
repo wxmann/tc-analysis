@@ -11,6 +11,7 @@ from pandas.util.testing import assert_series_equal
 from wxdata import stormevents, workdir
 from wxdata.plotting import simple_basemap, LegendBuilder
 from wxdata.stormevents import urls_for, convert_timestamp_tz, localize_timestamp_tz
+from wxdata.stormevents.temporal import df_tz, MixedTimezoneException
 from wxdata.stormevents.tornprocessing import plot_time_progression, plot_tornadoes
 from wxdata.testing import resource_path, open_resource, assert_frame_eq_ignoring_dtypes
 from wxdata.utils import datetime_buckets
@@ -345,3 +346,15 @@ def test_plot_time_progression():
                           legend=LegendBuilder(loc=2, fontsize=6, ncol=1, ax=ax2),
                           legend_handle_func=legend_handle_func)
     return fig
+
+
+def test_df_tz():
+    file = resource_path('120414_tornadoes.csv')
+    df = stormevents.load_file(file)
+
+    assert df_tz(df) == 'CST'
+
+    df.at[0, 'cz_timezone'] = 'EST'
+
+    with pytest.raises(MixedTimezoneException):
+        df_tz(df)

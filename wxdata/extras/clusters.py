@@ -1,3 +1,5 @@
+from __future__ import division
+
 from functools import partial
 
 import numpy as np
@@ -26,16 +28,16 @@ def st_clusters(events, eps_km, eps_min, min_samples, algorithm=None):
         cluster_dict = _brute_st_clusters(events, eps_km, eps_min, min_samples)
     else:
         points = discretize(events)
-        points['timestamp_nanos'] = points.timestamp.astype(np.int64)
+        points['timestamp_sec'] = points.timestamp.astype(np.int64) / 10 ** 9
         n_jobs = 1 if len(points) < 100 else -1
-        similarity = pairwise_distances(points[['lat', 'lon', 'timestamp_nanos']],
+        similarity = pairwise_distances(points[['lat', 'lon', 'timestamp_sec']],
                                         metric=partial(_boolean_distance, eps_km=eps_km, eps_min=eps_min),
                                         n_jobs=n_jobs)
 
         db = DBSCAN(eps=0.5, metric='precomputed', min_samples=min_samples)
         cluster_labels = db.fit_predict(similarity)
 
-        points.drop('timestamp_nanos', axis=1, inplace=True)
+        points.drop('timestamp_sec', axis=1, inplace=True)
         points['cluster'] = cluster_labels
 
         cluster_dict = {label: Cluster(label, points[points.cluster == label], events)
@@ -44,10 +46,12 @@ def st_clusters(events, eps_km, eps_min, min_samples, algorithm=None):
     return ClusterGroup(cluster_dict)
 
 
-def _boolean_distance(pt1, pt2, eps_km, eps_min,
-                      lat_index=0, lon_index=1, timestamp_nanos_index=2):
-    nanos_per_min = 10 ** 9 * 60
-    return abs(pt1[timestamp_nanos_index] - pt2[timestamp_nanos_index]) > eps_min * nanos_per_min or \
+def _boolean_distance(pt1, pt2, eps_km, eps_min):
+    lat_index = 0
+    lon_index = 1
+    timestamp_sec_index = 2
+    sec_per_min = 60
+    return abs(pt1[timestamp_sec_index] - pt2[timestamp_sec_index]) > eps_min * sec_per_min or \
            great_circle((pt1[lat_index], pt1[lon_index]), (pt2[lat_index], pt2[lon_index])).km > eps_km
 
 
@@ -146,10 +150,21 @@ class ClusterGroup(object):
     def __bool__(self):
         return len(self) > 0
 
+    def numpoints(self):
+        return sum(len(clust) for clust in self._unordered_clusters())
+
+    def biggest_cluster(self):
+        if len(self) == 0:
+            return None
+        return max(self._unordered_clusters(), key=len)
+
     @property
     def clusters(self):
-        unordered = [clust for i, clust in self._cluster_dict.items() if i != NOISE_LABEL]
-        return sorted(unordered, key=lambda cl: (cl.begin_time, cl.end_time, len(cl)))
+        return sorted(self._unordered_clusters(),
+                      key=lambda cl: (cl.begin_time, cl.end_time, len(cl)))
+
+    def _unordered_clusters(self):
+        return (clust for i, clust in self._cluster_dict.items() if i != NOISE_LABEL)
 
     @property
     def noise(self):
