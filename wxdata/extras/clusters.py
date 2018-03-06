@@ -177,7 +177,7 @@ class ClusterGroup(object):
 class Cluster(object):
     @classmethod
     def _empty_cluster(cls):
-        return cls(NOISE_LABEL, np.empty([1, 1]), None)
+        return cls(NOISE_LABEL, pd.DataFrame(columns=['lat', 'lon', 'timestamp']), None)
 
     def __init__(self, cluster_num, cluster_pts, parent):
         self._index = cluster_num
@@ -221,6 +221,9 @@ class Cluster(object):
     def __len__(self):
         return len(self._points)
 
+    def __bool__(self):
+        return self._parent is not None
+
     def summary(self):
         ts = self._points.timestamp
         return {
@@ -253,6 +256,9 @@ class Cluster(object):
         return '\n'.join([time_part, segments_part, casualty_part])
 
     def tor_stats(self):
+        if self._parent is None:
+            raise NotImplementedError("Cannot output tornado stats for empty cluster")
+
         all_events = self.events
         tor_events = all_events[all_events.event_type == 'Tornado']
         tor_ef = ef(tor_events)
@@ -316,7 +322,8 @@ def plot_clusters(cluster_groups, basemap, cluster_colors, noise_color='gray',
         if legend:
             legend.append(color, clust.describe_tors())
 
-    # noise = cluster_groups.noise
-    # plot_points(noise.pts, basemap, markersize=1.5, color=noise_color, path_effects=[shadow])
-    if legend:
-        legend.append(noise_color, noise.describe_tors())
+    noise = cluster_groups.noise
+    if noise:
+        plot_points(noise.pts, basemap, markersize=1.5, color=noise_color, path_effects=[shadow])
+        if legend:
+            legend.append(noise_color, noise.describe_tors())
