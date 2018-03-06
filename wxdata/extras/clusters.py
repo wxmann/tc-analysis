@@ -150,6 +150,9 @@ class ClusterGroup(object):
     def __bool__(self):
         return len(self) > 0
 
+    def __iter__(self):
+        return iter(self._unordered_clusters())
+
     def numpoints(self):
         return sum(len(clust) for clust in self._unordered_clusters())
 
@@ -168,10 +171,14 @@ class ClusterGroup(object):
 
     @property
     def noise(self):
-        return self._cluster_dict[NOISE_LABEL]
+        return self._cluster_dict.get(NOISE_LABEL, Cluster._empty_cluster)
 
 
 class Cluster(object):
+    @classmethod
+    def _empty_cluster(cls):
+        return cls(NOISE_LABEL, np.empty([1, 1]), None)
+
     def __init__(self, cluster_num, cluster_pts, parent):
         self._index = cluster_num
         self._points = cluster_pts
@@ -197,6 +204,9 @@ class Cluster(object):
 
     @property
     def events(self):
+        if self._parent is None:
+            return pd.DataFrame()
+
         return self._parent[self._parent.event_id.isin(
             self._points[self._points.cluster == self._index].event_id.unique())]
 
@@ -306,7 +316,7 @@ def plot_clusters(cluster_groups, basemap, cluster_colors, noise_color='gray',
         if legend:
             legend.append(color, clust.describe_tors())
 
-    noise = cluster_groups.noise
-    plot_points(noise.pts, basemap, markersize=1.5, color=noise_color, path_effects=[shadow])
+    # noise = cluster_groups.noise
+    # plot_points(noise.pts, basemap, markersize=1.5, color=noise_color, path_effects=[shadow])
     if legend:
         legend.append(noise_color, noise.describe_tors())
