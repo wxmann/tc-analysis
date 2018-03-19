@@ -133,7 +133,7 @@ def discretize_tor(torn_seg, spacing_min=1, endpoint=False):
     return ret
 
 
-def plot_tornadoes(tordf, basemap, color='gray', patheffect=None, **kwargs):
+def plot_tornadoes(tordf, basemap, color='gray', path_shadow=False, **kwargs):
     assert isinstance(tordf, pd.DataFrame)
 
     for _, event in tordf.iterrows():
@@ -148,11 +148,11 @@ def plot_tornadoes(tordf, basemap, color='gray', patheffect=None, **kwargs):
             else:
                 arr = np.array([pt1, pt2])
 
-            plot_lines(arr, basemap, color, patheffect, **kwargs)
+            plot_lines(arr, basemap, color, path_shadow=path_shadow, **kwargs)
 
 
 def plot_time_progression(tordf, basemap, time_buckets, cmap='viridis',
-                          patheffect=None, legend=None, legend_handle_func=None,
+                          path_shadow=False, legend=None, legend_handle_func=None,
                           **kwargs):
     bucketed = bucket_events(tordf, time_buckets)
     colors = sample_colors(len(bucketed), cmap)
@@ -162,7 +162,7 @@ def plot_time_progression(tordf, basemap, time_buckets, cmap='viridis',
         if bucketed_events:
             for event in bucketed_events:
                 bucket_latlons = event[['lat', 'lon']].as_matrix()
-                plot_lines(bucket_latlons, basemap, color, patheffect, **kwargs)
+                plot_lines(bucket_latlons, basemap, color, path_shadow=path_shadow, **kwargs)
 
             if legend is not None:
                 time_bucket_start, time_bucket_end = bucket_range

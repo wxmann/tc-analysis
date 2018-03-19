@@ -5,15 +5,17 @@ from functools import partial
 import numpy as np
 import pandas as pd
 import matplotlib.patheffects as path_effects
+import six
 from geopy.distance import great_circle
 from pandas.util.testing import assert_frame_equal
 from sklearn.cluster import DBSCAN
 from sklearn.metrics import pairwise_distances
 
-from wxdata.plotting import plot_points
+from wxdata.plotting import plot_points, sample_colors
+from wxdata.stormevents import time_partition
 from wxdata.stormevents.tornprocessing import discretize, ef, longevity
 
-__all__ = ['st_clusters', 'plot_clusters', 'assert_clusters_equal']
+__all__ = ['st_clusters', 'plot_clusters', 'assert_clusters_equal', 'timebucketed_clusters']
 
 NOISE_LABEL = -1
 
@@ -53,6 +55,15 @@ def _boolean_distance(pt1, pt2, eps_km, eps_min):
     sec_per_min = 60
     return abs(pt1[timestamp_sec_index] - pt2[timestamp_sec_index]) > eps_min * sec_per_min or \
            great_circle((pt1[lat_index], pt1[lon_index]), (pt2[lat_index], pt2[lon_index])).km > eps_km
+
+
+def timebucketed_clusters(events, timebuckets, remove_empty=False, **cluster_kw):
+    ret = {}
+    for bucket, datetors in time_partition(events, timebuckets):
+        dateclusts = st_clusters(datetors, **cluster_kw)
+        if dateclusts or not remove_empty:
+            ret[bucket] = dateclusts
+    return ret
 
 
 ## brute force clustering algorithm
@@ -151,7 +162,7 @@ class ClusterGroup(object):
         return len(self) > 0
 
     def __iter__(self):
-        return iter(self._unordered_clusters())
+        return iter(self.clusters)
 
     def numpoints(self):
         return sum(len(clust) for clust in self._unordered_clusters())
@@ -171,7 +182,7 @@ class ClusterGroup(object):
 
     @property
     def noise(self):
-        return self._cluster_dict.get(NOISE_LABEL, Cluster._empty_cluster)
+        return self._cluster_dict.get(NOISE_LABEL, Cluster._empty_cluster())
 
 
 class Cluster(object):
@@ -312,6 +323,9 @@ def assert_clusters_equal(clust1, clust2):
 
 def plot_clusters(cluster_groups, basemap, cluster_colors, noise_color='gray',
                   legend=None):
+
+    if isinstance(cluster_colors, six.string_types):
+        cluster_colors = sample_colors(len(cluster_groups), cluster_colors)
 
     assert len(cluster_groups) == len(cluster_colors)
     shadow = path_effects.withSimplePatchShadow(offset=(1, -1), alpha=0.6)

@@ -14,18 +14,14 @@ from wxdata.utils import find_latlon
 # TODO: add tests for functions in this module!
 
 
-def plot_lines(latlons, basemap, color, patheffect=None, **kwargs):
+def plot_lines(latlons, basemap, color, path_shadow=False, **kwargs):
     if not latlons.any():
         return
     else:
         use_kw = kwargs
-        if patheffect and 'path_effects' not in kwargs:
-            if not isinstance(patheffect, list):
-                use_kw['path_effects'] = [patheffect, path_effects.Normal()]
-            else:
-                use_kw['path_effects'] = patheffect
+        ispoint = latlons.shape[0] == 1
 
-        if latlons.shape[0] == 1:
+        if ispoint:
             # a line plot will cause a singular point to vanish, so we force it to
             # plot points here
             use_kw = use_kw.copy()
@@ -34,6 +30,15 @@ def plot_lines(latlons, basemap, color, patheffect=None, **kwargs):
             use_kw['marker'] = 'o'
             use_kw['markersize'] = size
             use_kw['markeredgewidth'] = 0.0
+
+        if path_shadow:
+            shadow_kw = dict(offset=(0.5, -0.5), alpha=0.6)
+            if ispoint:
+                shadow_effect = path_effects.SimplePatchShadow(**shadow_kw)
+            else:
+                shadow_effect = path_effects.SimpleLineShadow(**shadow_kw)
+
+            use_kw['path_effects'] = [shadow_effect, path_effects.Normal()]
 
         basemap.plot(latlons[:, 1], latlons[:, 0],
                      color=color, latlon=True, **use_kw)
@@ -94,20 +99,20 @@ def plot_cities(city_coordinates, basemap,
 ## TODO: remove the patheffect kw... it's redundant and sometimes I don't want a shadow
 def plot_cities_with_geocodor(cities, basemap, geocodor=None, label_transform=None,
                               color='k', marker='+', markersize=9, labelsize=12,
-                              alpha=0.6, dx=0.05, dy=-0.15, patheffect=None,
+                              alpha=0.8, dx=0.05, dy=-0.15, label_shadow=False,
                               **kw):
     if label_transform is None:
         label_transform = lambda city: city.split(',')[0].strip().upper()
 
-    if patheffect is None:
-        patheffect = [path_effects.SimplePatchShadow(offset=(1, -1)),
-                      path_effects.Normal()]
+    if label_shadow:
+        shadow_effect = [path_effects.SimplePatchShadow(offset=(0.5, -0.5), alpha=0.8),
+                         path_effects.Normal()]
+        kw['path_effects'] = shadow_effect
 
     for city in cities:
         coords = find_latlon(city, geocodor)
         x, y = basemap(*reversed(coords))
-        basemap.plot(x, y, marker, markersize=markersize, color=color, alpha=alpha,
-                     path_effects=patheffect, **kw)
+        basemap.plot(x, y, marker, markersize=markersize, color=color, alpha=alpha, **kw)
 
         labelx, labely = basemap(coords[1] + dx, coords[0] + dy)
         label = label_transform(city)
@@ -116,7 +121,7 @@ def plot_cities_with_geocodor(cities, basemap, geocodor=None, label_transform=No
         # Currently fails with `AttributeError: Unknown property ax` if you try to
         # do ax.text(...)
         plt.text(labelx, labely, label, fontsize=labelsize, color=color, alpha=alpha,
-                 path_effects=patheffect, clip_on=True, **kw)
+                 clip_on=True, **kw)
 
 
 def bottom_right_textbox(ax, text, fontsize=16):
@@ -170,7 +175,7 @@ def simple_basemap(bbox, proj='merc', resolution='i', ax=None,
     return m
 
 
-def draw_hways(basemap, color='red', linewidth=0.5, ax=None):
+def draw_hways(basemap, color='red', linewidth=0.4, ax=None):
     basemap.readshapefile(get_resource('hways/hways'), 'hways', drawbounds=True,
                           color=color, linewidth=linewidth, ax=ax)
 
