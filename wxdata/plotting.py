@@ -68,9 +68,8 @@ def plot_time_progression(pts, basemap, time_buckets, colormap,
     buckets = list(time_buckets)
     colors = sample_colors(len(buckets), colormap)
 
-    for time_bucket_start, time_bucket_end in buckets:
+    for (time_bucket_start, time_bucket_end), color in zip(buckets, colors):
         hour_pts = pts[(pts.timestamp >= time_bucket_start) & (pts.timestamp <= time_bucket_end)]
-        color = next(colors)
         plot_points(hour_pts, basemap, color, marker=marker, markersize=markersize, **kwargs)
 
         if legend is not None:

@@ -175,7 +175,8 @@ def plot_default_display(display, field, sweep, vbounds=None, resolution='i',
                          bbox=(None, None, None, None),
                          map_bg_color='white', map_layer_color='k',
                          map_layers=('coastlines', 'countries', 'states', 'counties', 'highways'),
-                         cmap=None, debug=False, basemap=None, ax=None):
+                         cmap=None, debug=False, basemap=None,
+                         ax=None, gatefilter=None):
 
     vmin, vmax = vbounds if vbounds is not None else _DEFAULT_BOUNDS.get(field, (None, None))
     cmap = cmap if cmap is not None else _OVERRIDE_DEFAULT_CM.get(field, None)
@@ -208,7 +209,7 @@ def plot_default_display(display, field, sweep, vbounds=None, resolution='i',
     display.plot_ppi_map(field, sweep=sweep, title_flag=False, cmap=cmap,
                          vmin=vmin, vmax=vmax, resolution=resolution,
                          embelish=False, colorbar_flag=False, ax=ax,
-                         **geog_kw)
+                         gatefilter=gatefilter, **geog_kw)
 
     display.basemap.drawmapboundary(fill_color=map_bg_color)
     if 'coastlines' in map_layers:

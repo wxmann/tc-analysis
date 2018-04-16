@@ -341,3 +341,6 @@ def plot_clusters(cluster_groups, basemap, cluster_colors, noise_color='gray',
         plot_points(noise.pts, basemap, markersize=1.5, color=noise_color, path_effects=[shadow])
         if legend:
             legend.append(noise_color, noise.describe_tors())
+
+    if legend:
+        legend.plot_legend()
