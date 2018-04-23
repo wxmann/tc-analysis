@@ -45,6 +45,7 @@ def plot_lines(latlons, basemap, color, path_shadow=False, **kwargs):
 
 
 ## TODO: deprecate plot_points, plot_cities and plot_time_progression below,
+# TODO: also deprecate simple_basemap (in maps now)
 ## they are in the tornprocessing module now
 
 
@@ -90,6 +91,38 @@ def plot_cities(city_coordinates, basemap,
 
         labelx, labely = basemap(coords[1] + dx, coords[0] + dy)
         plt.text(labelx, labely, city, fontsize=labelsize, color=color, alpha=alpha)
+
+
+def simple_basemap(bbox, proj='merc', resolution='i', ax=None,
+                   us_detail=True, draw=None):
+    llcrnrlon, urcrnrlon, llcrnrlat, urcrnrlat = bbox[:4]
+
+    m = Basemap(projection=proj, ax=ax,
+                llcrnrlon=llcrnrlon, llcrnrlat=llcrnrlat, urcrnrlon=urcrnrlon, urcrnrlat=urcrnrlat,
+                resolution=resolution, area_thresh=1000)
+
+    if draw is None:
+        draw = ['coastlines', 'countries', 'states']
+        if us_detail:
+            draw += ['counties', 'highways']
+
+    if 'coastlines' in draw:
+        m.drawcoastlines()
+    if 'countries' in draw:
+        m.drawcountries()
+    if 'states' in draw:
+        m.drawstates()
+    if 'counties' in draw:
+        m.drawcounties()
+    if 'highways' in draw:
+        draw_hways(m)
+
+    return m
+
+
+def draw_hways(basemap, color='red', linewidth=0.4, ax=None):
+    basemap.readshapefile(get_resource('hways/hways'), 'hways', drawbounds=True,
+                          color=color, linewidth=linewidth, ax=ax)
 
 
 ## END DEPRECATE
@@ -147,38 +180,6 @@ def bottom_left_textbox(ax, text, fontsize=16):
              bbox=dict(alpha=0.75, facecolor='white', edgecolor='gray'))
 
 
-def simple_basemap(bbox, proj='merc', resolution='i', ax=None,
-                   us_detail=True, draw=None):
-    llcrnrlon, urcrnrlon, llcrnrlat, urcrnrlat = bbox[:4]
-
-    m = Basemap(projection=proj, ax=ax,
-                llcrnrlon=llcrnrlon, llcrnrlat=llcrnrlat, urcrnrlon=urcrnrlon, urcrnrlat=urcrnrlat,
-                resolution=resolution, area_thresh=1000)
-
-    if draw is None:
-        draw = ['coastlines', 'countries', 'states']
-        if us_detail:
-            draw += ['counties', 'highways']
-
-    if 'coastlines' in draw:
-        m.drawcoastlines()
-    if 'countries' in draw:
-        m.drawcountries()
-    if 'states' in draw:
-        m.drawstates()
-    if 'counties' in draw:
-        m.drawcounties()
-    if 'highways' in draw:
-        draw_hways(m)
-
-    return m
-
-
-def draw_hways(basemap, color='red', linewidth=0.4, ax=None):
-    basemap.readshapefile(get_resource('hways/hways'), 'hways', drawbounds=True,
-                          color=color, linewidth=linewidth, ax=ax)
-
-
 class LegendBuilder(object):
     def __init__(self, ax=None, **legend_kw):
         self.handles = []
@@ -211,15 +212,30 @@ def shadow(offset=(0.5, 0.5), alpha=0.6):
     return path_effects.withSimplePatchShadow(offset=offset, alpha=alpha, shadow_rgbFace='black')
 
 
-def inset_colorbar(mappable, ax, width='60%', height='3%', loc=1, tickcolor='k', ticksize='large',
-                   title=None, titlecolor='k', titlesize=14):
-    cbar_ax = inset_axes(ax, width=width, height=height, loc=loc)
-    cbar = plt.colorbar(mappable, cax=cbar_ax, orientation='horizontal')
-    cbar.ax.xaxis.set_tick_params(which='major', direction='in')
+def inset_colorbar(mappable, ax=None, width='60%', height='3%', loc=1, tickcolor='k', ticksize='large',
+                   title=None, titlecolor='k', titlesize=14, orientation='horizontal'):
+    if ax is None:
+        ax = plt.gca()
 
-    text_shadow = shadow()
-    plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color=tickcolor, size=ticksize, y=1.0,
-             path_effects=[text_shadow])
+    cbar_ax = inset_axes(ax, width=width, height=height, loc=loc)
+
+    if orientation == 'horizontal':
+        cbar = plt.colorbar(mappable, cax=cbar_ax, orientation='horizontal')
+        cbar.ax.xaxis.set_tick_params(which='major', direction='in')
+
+        text_shadow = shadow()
+        plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color=tickcolor, size=ticksize, y=1.0,
+                 path_effects=[text_shadow])
+    elif orientation == 'vertical':
+        cbar = plt.colorbar(mappable, cax=cbar_ax, orientation='vertical')
+        cbar.ax.yaxis.set_tick_params(which='major', direction='in')
+
+        text_shadow = shadow()
+        plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), color=tickcolor, size=ticksize, x=1.0,
+                 path_effects=[text_shadow])
+    else:
+        raise ValueError("Invalid orientation keyword: {}".format(orientation))
+
     if title:
         cbar.set_label(title, color=titlecolor, path_effects=[text_shadow], fontsize=titlesize)
 
