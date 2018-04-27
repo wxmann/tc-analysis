@@ -4,14 +4,19 @@ import matplotlib.pyplot as plt
 
 from wxdata.plotting import inset_colorbar
 
+LEVEL_DEFAULTS = {
+    'H5_HEIGHT': np.arange(4590, 6090, 30),
+    'H5_ANOMALY': np.arange(-320, 340, 20)
+}
+
 
 def h5_anom_plot(lats, lons, hgts, anoms, basemap,
                  hgt_levels=None, anom_levels=None, hgt_labels=True, anom_cbar=True):
     if hgt_levels is None:
-        hgt_levels = np.arange(4680, 6040, 40)
+        hgt_levels = LEVEL_DEFAULTS['H5_HEIGHT']
 
     if anom_levels is None:
-        anom_levels = np.arange(-360, 360, 40)
+        anom_levels = LEVEL_DEFAULTS['H5_ANOMALY']
 
     hgts, anoms, lons = addcyclic(hgts, anoms, lons)
     xgrid, ygrid = np.meshgrid(lons, lats)

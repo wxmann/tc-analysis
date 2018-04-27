@@ -5,7 +5,7 @@ from wxdata.config import get_resource
 
 def north_america(resolution='l', ax=None, draw=None):
     m = Basemap(projection='lcc', resolution=resolution, ax=ax,
-                lat_0=50, lon_0=-100, width=13000000, height=9500000,
+                lat_0=50, lon_0=-100, width=13000000, height=9300000,
                 area_thresh=1000)
 
     if draw is None:
@@ -17,7 +17,7 @@ def north_america(resolution='l', ax=None, draw=None):
 
 def nhem(resolution='l', ax=None, draw=None):
     m = Basemap(projection='npstere', resolution=resolution, ax=ax,
-                boundinglat=15, lon_0=-100,
+                boundinglat=17.5, lon_0=-100,
                 area_thresh=1000)
 
     if draw is None:

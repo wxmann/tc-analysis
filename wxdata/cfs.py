@@ -20,7 +20,17 @@ CFS_REANALYSIS = 'cfs_reanl'
 CFS_V2 = 'cfs_v2_anl'
 
 
-def cfsr_6h(var, time, fcst=None, debug=False, opener=xr.open_dataset, _tds=False):
+def cfs_6h_dataset(var, time, fcst=None, debug=False, opener=xr.open_dataset):
+    datetime_ = _maybe_convert_str(time)
+    kw = dict(fcst=fcst, debug=debug, opener=opener)
+    if datetime_ >= pd.Timestamp('2011-04-01 00:00'):
+        ds = cfsv2_6h(var, time, **kw)
+    else:
+        ds = cfsr_6h(var, time, **kw)
+    return ds
+
+
+def cfsr_6h(var, time, fcst=None, debug=False, opener=xr.open_dataset):
     time = _maybe_convert_str(time)
     catalog_url = '{par}/{cat}_6h_{var}/{ts:%Y}/{ts:%Y%m}/{ts:%Y%m%d}/'.format(cat=CFS_REANALYSIS, par=CFRS_DAP,
                                                                                var=var, ts=time)
@@ -29,10 +39,10 @@ def cfsr_6h(var, time, fcst=None, debug=False, opener=xr.open_dataset, _tds=Fals
                                                               fcst='nl' if fcst is None else str(fcst).zfill(2),
                                                               ts=time,
                                                               frmt=GRB2_FORMAT)
-    return _open_cfs_dataset(catalog_url, ds_name, debug, opener, _tds)
+    return _open_cfs_dataset(catalog_url, ds_name, debug, opener, _tds=False)
 
 
-def cfsv2_6h(var, time, fcst=None, debug=False, opener=xr.open_dataset, _tds=False):
+def cfsv2_6h(var, time, fcst=None, debug=False, opener=xr.open_dataset):
     time = _maybe_convert_str(time)
 
     if var == 'pgb':
@@ -46,7 +56,16 @@ def cfsv2_6h(var, time, fcst=None, debug=False, opener=xr.open_dataset, _tds=Fal
     ds_name = 'cdas1.t{ts:%Hz}.{var}grbh{fcst}.{frmt}'.format(ts=time, var=var2,
                                                               fcst='anl' if fcst is None else str(fcst).zfill(2),
                                                               frmt=GRIB2_FORMAT)
-    return _open_cfs_dataset(catalog_url, ds_name, debug, opener, _tds)
+    return _open_cfs_dataset(catalog_url, ds_name, debug, opener, _tds=False)
+
+
+def cfs_6h_mfdataset(var, times, fcst=None, debug=False, yield_single_times=False):
+    urls = [cfs_6h_dataset(var, time, fcst=fcst, debug=debug, opener=None) for time in times]
+    mf = xr.open_mfdataset(urls, concat_dim='time')
+    if yield_single_times:
+        return ((time, mf.sel(time=time)) for time in times)
+    else:
+        return mf
 
 
 def _open_cfs_dataset(catalog_url, ds_name, debug, opener, _tds=False):
@@ -60,6 +79,18 @@ def _open_cfs_dataset(catalog_url, ds_name, debug, opener, _tds=False):
     if opener is None:
         return ds_url
     return opener(ds_url)
+
+
+def _maybe_convert_str(time, conversion=None):
+    if conversion is None:
+        conversion = lambda ts: pd.Timestamp(ts)
+
+    if isinstance(time, six.string_types):
+        return conversion(time)
+
+    return time
+
+# TODO: deprecate the below two functions which don't leverage the parallelization built into dask and are slow
 
 
 def cfsr_6h_range(var, start_time, end_time, timestep='6 hr', **open_kw):
@@ -90,36 +121,45 @@ def cfsr_6h_apply(var, start_time, end_time, timestep='6 hr', apply=None, parall
         return pool.map(apply, urls)
 
 
-def _maybe_convert_str(time, conversion=None):
-    if conversion is None:
-        conversion = lambda ts: pd.Timestamp(ts).to_pydatetime()
-
-    if isinstance(time, six.string_types):
-        return conversion(time)
-
-    return time
-
-
 ### PLOTTING
 
 
-def plot_h5_anomaly(datetime_, basemap, debug=True, **plot_kw):
-    datetime_ = _maybe_convert_str(datetime_)
-    if datetime_.year >= 2011:
-        ds = cfsv2_6h('pgb', datetime_, debug=debug)
-    else:
-        ds = cfsr_6h('pgb', datetime_, debug=debug)
-
+# TODO: deprecate, we can just use `plot_h5_anomaly_dataset` function
+def plot_h5_anomaly(time, basemap, debug=True, subset=True, **plot_kw):
     try:
-        anom = ds['Geopotential_height_anomaly_isobaric'].sel(isobaric2=50000)
-        hgt = ds['Geopotential_height_isobaric'].sel(isobaric3=50000)
+        times = iter(time)
+        ds = cfs_6h_mfdataset('pgb', times, debug=debug)
+    except TypeError:
+        ds = cfs_6h_dataset('pgb', time, debug=debug)
+
+    return plot_h5_anomaly_dataset(ds, basemap, subset, **plot_kw)
+
+
+def plot_h5_anomaly_dataset(xr_dataset, basemap, subset=True, close_dataset=True, **plot_kw):
+    try:
+        # TODO: figure out subsetting longitude data and 180 -> 360 longitude conversion
+        if subset:
+            lat_query = {'lat': slice(basemap.latmax, basemap.latmin)}
+        else:
+            lat_query = {}
+
+        anom = xr_dataset['Geopotential_height_anomaly_isobaric'].sel(isobaric2=50000, **lat_query)
+        hgt = xr_dataset['Geopotential_height_isobaric'].sel(isobaric3=50000, **lat_query)
 
         lons = hgt.lon.values
         lats = hgt.lat.values
 
-        anom = anom.sum('time').values
-        hgt = hgt.sum('time').values
+        if 'time' in anom.dims:
+            anom = anom.sum('time').values
+        else:
+            anom = anom.values
+
+        if 'time' in hgt.dims:
+            hgt = hgt.sum('time').values
+        else:
+            hgt = hgt.values
 
         return uaplots.h5_anom_plot(lats, lons, hgt, anom, basemap, **plot_kw)
     finally:
-        ds.close()
+        if close_dataset:
+            xr_dataset.close()
