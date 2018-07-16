@@ -3,16 +3,22 @@ from siphon.catalog import TDSCatalog
 import pandas as pd
 import xarray as xr
 
+_GRIDSAT_GOES_REGEX = r'(?P<year>\d{4})\.(?P<month>\d{2})\.(?P<day>\d{2})\.(?P<hour>\d{2})(?P<minute>\d{2})'
 
-def gridsat_goes_query(dt, bbox, var, return_type='xarray', cat=None):
+
+def gridsat_goes_query(dt, bbox, var, return_type='xarray', catalog=None, sat=None):
     dt = pd.Timestamp(dt)
-    if cat is None:
+    if catalog is None:
         cat_url = 'https://www.ncei.noaa.gov/thredds/catalog/' \
                   'satellite/gridsat-goes-full-disk/{dt:%Y}/{dt:%m}/catalog.xml'.format(dt=dt)
-        cat = TDSCatalog(cat_url)
+        catalog = TDSCatalog(cat_url)
 
-    regex = r'(?P<year>\d{4})\.(?P<month>\d{2})\.(?P<day>\d{2})\.(?P<hour>\d{2})(?P<minute>\d{2})'
-    return _get_subset(cat, dt, bbox, var, regex, return_type)
+    if sat is not None:
+        regex = '{}\.'.format(sat) + _GRIDSAT_GOES_REGEX
+    else:
+        regex = _GRIDSAT_GOES_REGEX
+
+    return _get_subset(catalog, dt, bbox, var, regex, return_type)
 
 
 def _get_subset(cat, dt, bbox, var, time_regex, return_type='xarray'):
