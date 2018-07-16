@@ -138,7 +138,12 @@ def load_events(start, end, eventtypes=None, states=None, months=None,
     errors = [result for result in results if not result.success]
 
     if errors:
-        err_yrs = [str(_year_from_link(err.url)) for err in errors]
+        err_yrs = []
+        for err in errors:
+            err_yrs.append(str(_year_from_link(err.url)))
+
+            if debug:
+                print(err.exceptions)
         warnings.warn('There were errors trying to load dataframes for years: {}'.format(','.join(err_yrs)))
 
     if dfs:

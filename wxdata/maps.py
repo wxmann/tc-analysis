@@ -15,9 +15,21 @@ def north_america(resolution='l', ax=None, draw=None):
     return m
 
 
+def conus(resolution='l', ax=None, draw=None):
+    m = Basemap(projection='merc', resolution=resolution, ax=ax,
+                llcrnrlon=-130, llcrnrlat=21, urcrnrlon=-64, urcrnrlat=53,
+                area_thresh=1000)
+
+    if draw is None:
+        draw = ['coastlines', 'countries', 'states']
+
+    _draw_in_basemap(m, draw)
+    return m
+
+
 def nhem(resolution='l', ax=None, draw=None):
     m = Basemap(projection='npstere', resolution=resolution, ax=ax,
-                boundinglat=17.5, lon_0=-100,
+                boundinglat=15, lon_0=-100,
                 area_thresh=1000)
 
     if draw is None:
@@ -45,6 +57,9 @@ def simple_basemap(bbox, proj='merc', resolution='i', ax=None,
 
 
 def _draw_in_basemap(basemap, layers):
+    if layers == 'none':
+        return
+
     if 'coastlines' in layers:
         basemap.drawcoastlines()
     if 'countries' in layers:

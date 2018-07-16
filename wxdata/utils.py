@@ -81,3 +81,10 @@ def find_latlon(loc, geocodor=None):
     if not location:
         raise ValueError("Cannot find latlon for {}".format(loc))
     return location.latitude, location.longitude
+
+
+def wrap_longitude(dataset, lon_dim='lon'):
+    londata = dataset[lon_dim]
+    if londata.min() < 0.0:
+        dataset[lon_dim] = ((londata - 180) % 360) - 180
+    return dataset
