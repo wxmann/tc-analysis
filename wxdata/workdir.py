@@ -24,7 +24,7 @@ def get():
     workdir = os.path.expanduser(workdir)
 
     if not os.path.isdir(workdir):
-        raise WorkDirectoryException('Work directory must be a valid directory!')
+        raise WorkDirectoryException('Work directory: {} must be a valid directory!'.format(workdir))
 
     return workdir
 
@@ -43,21 +43,25 @@ def setto(directory):
     os.environ[VAR] = directory
 
 
-def save_dest(url):
-    workdir = get()
+def save_dest(url, in_subdir=None):
+    if in_subdir is not None:
+        savedir = subdir(in_subdir)
+    else:
+        savedir = get()
+
     relpath = urlparse(url)
     filename = os.path.basename(relpath.path)
 
     if filename and '.' in filename:
-        return os.path.join(workdir, filename)
+        return os.path.join(savedir, filename)
     else:
         return ''
 
 
-def bulksave(urls, override_existing=False, postsave=None):
+def bulksave(urls, in_subdir=None, override_existing=False, postsave=None):
     src_dest_map = {}
     for url in urls:
-        dest = save_dest(url)
+        dest = save_dest(url, in_subdir)
         if dest:
             src_dest_map[url] = dest
 

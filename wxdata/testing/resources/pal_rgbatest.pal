@@ -1,0 +1,14 @@
+;-----------------------------------------------------
+;  'Dummy' Infrared Color Table
+;  adapted from almanydesigns.com/grx
+
+units: ºC
+step: 10
+product: IR
+
+
+color4: 40 0 0 0 0
+color4: 30 238 243 237 255
+color4: 20 0 4 165 255 0 217 255 255
+color: 10 52 133 15 124 255 0
+color: 0 160 99 45 250 0 0
