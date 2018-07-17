@@ -16,7 +16,7 @@ def load_cmap(url):
     save_to_local = bulksave([url], in_subdir='cmaps')[0]
 
     if not save_to_local.success:
-        raise ValueError("Cannot parse .pal file to cmao".format(url))
+        raise ValueError("Cannot parse .pal file to cmap".format(url))
 
     return load_pal(save_to_local.dest)
 
@@ -26,7 +26,7 @@ def load_pal(file):
     rawcolors = parse_cmap_raw_colors(file)
 
     norm = colors.Normalize(min(rawcolors), max(rawcolors), clip=False)
-    cmap_dict = _rawdict2cmapdict(rawcolors)
+    cmap_dict = colordict_to_cmap(rawcolors)
     return colors.LinearSegmentedColormap(name, cmap_dict), norm
 
 
@@ -36,16 +36,18 @@ def load_pal(file):
 
 
 def parse_cmap_raw_colors(palfile):
-    rawcolors = {}
+    colorbar = {}
 
-    with open(palfile, encoding='utf8', errors='ignore') as paldata:
+    with open(palfile, encoding='utf-8', errors='ignore') as paldata:
         for line in paldata:
             if line and line[0] != ';':
-                bndy, clrs = _parse_pal_line(line)
-                if bndy is not None:
-                    rawcolors[float(bndy)] = clrs
+                results = _parse_pal_line(line)
+                if isinstance(results, tuple) and len(results) == 2:
+                    bndy, clrs = results
+                    if bndy is not None:
+                        colorbar[float(bndy)] = clrs
 
-    return rawcolors
+    return colorbar
 
 
 def _parse_pal_line(line):
@@ -78,7 +80,12 @@ def _parse_pal_line(line):
     return None, None
 
 
-def _rawdict2cmapdict(colors_dict):
+###################################################
+# Converting dict to cmap and norm for matplotlib #
+###################################################
+
+
+def colordict_to_cmap(colors_dict):
     cmap_dict = {
         'red': [],
         'green': [],

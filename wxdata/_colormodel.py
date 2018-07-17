@@ -18,7 +18,7 @@ def to_fractional(rgb_tup):
 
 
 def _rgb_frac(val):
-    return val - MIN_RGB_VALUE / (MAX_RGB_VALUE - MIN_RGB_VALUE)
+    return (val - MIN_RGB_VALUE) / (MAX_RGB_VALUE - MIN_RGB_VALUE)
 
 
 rgb = namedtuple('rgb', 'r g b')
