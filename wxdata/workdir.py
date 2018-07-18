@@ -58,6 +58,11 @@ def save_dest(url, in_subdir=None):
         return ''
 
 
+def savefile(url, in_subdir=None, override_existing=False, postsave=None):
+    src_dest_map = {url: save_dest(url, in_subdir)}
+    return saveall(src_dest_map, override_existing, postsave)[0]
+
+
 def bulksave(urls, in_subdir=None, override_existing=False, postsave=None):
     src_dest_map = {}
     for url in urls:

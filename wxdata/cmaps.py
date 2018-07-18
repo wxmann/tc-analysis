@@ -3,7 +3,7 @@ import os
 from matplotlib import colors
 
 from wxdata._colormodel import MAX_RGB_VALUE, to_rgba, to_fractional, rgb, rgba
-from wxdata.workdir import bulksave
+from wxdata.workdir import savefile
 
 __all__ = ['load_cmap']
 
@@ -13,8 +13,7 @@ def load_cmap(url):
     if not ext or ext != '.pal':
         raise ValueError("Cannot read file to cmap: {}".format(url))
 
-    save_to_local = bulksave([url], in_subdir='cmaps')[0]
-
+    save_to_local = savefile(url, in_subdir='cmaps')
     if not save_to_local.success:
         raise ValueError("Cannot parse .pal file to cmap".format(url))
 

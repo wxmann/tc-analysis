@@ -3,6 +3,14 @@ import shutil
 from collections import namedtuple
 from functools import partial
 from multiprocessing import Pool
+try:
+    # PYTHON 3
+    from urllib.parse import urlparse
+    from urllib.request import urlopen
+except ImportError:
+    # PYTHON 2
+    from urllib import urlopen
+    from urlparse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -140,11 +148,28 @@ def _save_and_exec_callback(url, src_dest_map, override_existing, callback):
                 save_result.exceptions.append(e)
 
     dest = src_dest_map[url]
+    scheme = urlparse(url).scheme
     if not override_existing and os.path.isfile(dest):
         result = _SaveResult(url, dest, response=None, executed_request=False)
         wrapped_callback(dest, result)
         return result
-    else:
+
+    # TODO: merge the ftp and http code... they're essentially the same thing
+    # and we do not need the requests library to save
+    elif scheme == 'ftp':
+        source = urlopen(url)
+        with open(dest, 'wb') as target:
+            target.write(source.read())
+
+        result = _SaveResult(url, dest, source, executed_request=True)
+        try:
+            # TODO: some kind of error handling with getcode()
+            wrapped_callback(dest, result)
+        except Exception as e:
+            result.exceptions.append(e)
+        return result
+
+    elif scheme == 'http':
         response = requests.get(url, stream=True)
         result = _SaveResult(url, dest, response, executed_request=True)
 
@@ -156,3 +181,5 @@ def _save_and_exec_callback(url, src_dest_map, override_existing, callback):
             except requests.HTTPError as e:
                 result.exceptions.append(e)
         return result
+    else:
+        raise ValueError("Cannot save: {}; only FTP and HTTP URL's are supported at this time".format(url))
