@@ -30,6 +30,11 @@ def st_clusters(events, eps_km, eps_min, min_samples, algorithm=None):
         cluster_dict = _brute_st_clusters(events, eps_km, eps_min, min_samples)
     else:
         points = discretize(events)
+        points = points[(~points.lon.isnull()) & (~points.lat.isnull())]
+
+        if points.empty:
+            return ClusterGroup.empty()
+
         points['timestamp_sec'] = points.timestamp.astype(np.int64) / 10 ** 9
         n_jobs = 1 if len(points) < 100 else -1
         similarity = pairwise_distances(points[['lat', 'lon', 'timestamp_sec']],

@@ -1,3 +1,5 @@
+from functools import partial
+
 from mpl_toolkits.basemap import Basemap
 
 from wxdata.config import get_resource
@@ -54,6 +56,10 @@ def simple_basemap(bbox, proj='merc', resolution='i', ax=None,
 
     _draw_in_basemap(m, draw)
     return m
+
+
+great_plains = partial(simple_basemap, bbox=(-110, -88, 27.5, 50))
+srn_plains = partial(simple_basemap, bbox=(-110, -88, 27.5, 40))
 
 
 def _draw_in_basemap(basemap, layers):

@@ -2,6 +2,8 @@ import os
 import shelve
 from functools import wraps
 
+import pandas as pd
+
 from wxdata import workdir, _timezones
 
 
@@ -11,7 +13,6 @@ def diff(df1, df2):
 
 # TODO test
 def datetime_buckets(start_time, end_time, dt, tz=None):
-    import pandas as pd
     start_time = pd.Timestamp(start_time)
     end_time = pd.Timestamp(end_time)
     dt = pd.Timedelta(dt)

@@ -169,7 +169,7 @@ def _save_and_exec_callback(url, src_dest_map, override_existing, callback):
             result.exceptions.append(e)
         return result
 
-    elif scheme == 'http':
+    elif scheme in ('http', 'https'):
         response = requests.get(url, stream=True)
         result = _SaveResult(url, dest, response, executed_request=True)
 
@@ -182,4 +182,4 @@ def _save_and_exec_callback(url, src_dest_map, override_existing, callback):
                 result.exceptions.append(e)
         return result
     else:
-        raise ValueError("Cannot save: {}; only FTP and HTTP URL's are supported at this time".format(url))
+        raise ValueError("Cannot save: {}; only FTP and HTTP(S) URL's are supported at this time".format(url))
