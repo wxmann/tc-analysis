@@ -132,10 +132,10 @@ def plot_h5_anomaly(time, basemap, debug=True, subset=True, **plot_kw):
     except TypeError:
         ds = cfs_6h_dataset('pgb', time, debug=debug)
 
-    return plot_h5_anomaly_dataset(ds, basemap, subset, **plot_kw)
+    return plot_hgt_anomaly_dataset(ds, basemap, subset, lev=50000, **plot_kw)
 
 
-def plot_h5_anomaly_dataset(xr_dataset, basemap, subset=True, close_dataset=True, **plot_kw):
+def plot_hgt_anomaly_dataset(xr_dataset, basemap, lev=50000, subset=True, close_dataset=True, **plot_kw):
     try:
         # TODO: figure out subsetting longitude data and 180 -> 360 longitude conversion
         if subset:
@@ -143,8 +143,8 @@ def plot_h5_anomaly_dataset(xr_dataset, basemap, subset=True, close_dataset=True
         else:
             lat_query = {}
 
-        anom = xr_dataset['Geopotential_height_anomaly_isobaric'].sel(isobaric2=50000, **lat_query)
-        hgt = xr_dataset['Geopotential_height_isobaric'].sel(isobaric3=50000, **lat_query)
+        anom = xr_dataset['Geopotential_height_anomaly_isobaric'].sel(isobaric2=lev, **lat_query)
+        hgt = xr_dataset['Geopotential_height_isobaric'].sel(isobaric3=lev, **lat_query)
 
         lons = hgt.lon.values
         lats = hgt.lat.values

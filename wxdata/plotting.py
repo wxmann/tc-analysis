@@ -3,9 +3,10 @@ import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
 import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from mpl_toolkits.basemap import Basemap
+from mpl_toolkits.basemap import Basemap, addcyclic
 
 from wxdata.config import get_resource
 from wxdata.utils import find_latlon
@@ -42,6 +43,11 @@ def plot_lines(latlons, basemap, color, path_shadow=False, **kwargs):
 
         basemap.plot(latlons[:, 1], latlons[:, 0],
                      color=color, latlon=True, **use_kw)
+
+
+def plot_hatched(x, y, data, criterion, basemap, latlon=True, hatch='///'):
+    masked_data = np.ma.masked_where(~criterion, data)
+    return basemap.pcolor(x, y, masked_data, latlon=latlon, hatch=hatch, alpha=0)
 
 
 ## TODO: deprecate plot_points, plot_cities and plot_time_progression below,
@@ -244,7 +250,6 @@ def inset_colorbar(mappable, ax=None, width='60%', height='3%', loc=1, tickcolor
 
 ## Color sampling
 
-
 def sample_colors(n, src_cmap):
     return ColorSamples(n, src_cmap)
 
@@ -270,3 +275,20 @@ class ColorSamples(object):
 
     def __len__(self):
         return self.n_samples
+
+
+## Utilities
+
+def prepare_data_for_basemap(dataset):
+    lons = dataset.lon.values
+    lats = dataset.lat.values
+
+    # TODO: is there squeeze function?
+    if 'time' in dataset.dims:
+        data = dataset.sum('time').values
+    else:
+        data = dataset.values
+
+    data, lons = addcyclic(data, lons)
+    xgrid, ygrid = np.meshgrid(lons, lats)
+    return data, xgrid, ygrid
