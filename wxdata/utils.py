@@ -89,3 +89,9 @@ def wrap_longitude(dataset, lon_dim='lon'):
     if londata.min() < 0.0:
         dataset[lon_dim] = ((londata - 180) % 360) - 180
     return dataset
+
+
+def two_sided_range(start, stop, step):
+    positive_range = list(range(start, stop, step))
+    negative_range = reversed([-elem for elem in positive_range if elem != 0])
+    return list(negative_range) + positive_range

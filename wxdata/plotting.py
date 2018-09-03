@@ -4,6 +4,7 @@ import matplotlib.patches as mpatches
 import matplotlib.patheffects as path_effects
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.ma as ma
 import pandas as pd
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from mpl_toolkits.basemap import Basemap, addcyclic
@@ -279,16 +280,27 @@ class ColorSamples(object):
 
 ## Utilities
 
-def prepare_data_for_basemap(dataset):
+def prepare_data_for_basemap(dataset, subset_map=None):
     lons = dataset.lon.values
     lats = dataset.lat.values
 
-    # TODO: is there squeeze function?
     if 'time' in dataset.dims:
-        data = dataset.sum('time').values
+        data = dataset.squeeze('time').values
     else:
         data = dataset.values
 
     data, lons = addcyclic(data, lons)
     xgrid, ygrid = np.meshgrid(lons, lats)
-    return data, xgrid, ygrid
+
+    if subset_map is None:
+        return data, xgrid, ygrid
+    return subset_to_map(data, xgrid, ygrid, subset_map), xgrid, ygrid
+
+
+def subset_to_map(data, x, y, basemap):
+    mask1 = x < basemap.xmin
+    mask2 = x > basemap.xmax
+    mask3 = y > basemap.ymax
+    mask4 = y < basemap.ymin
+    mask = mask1 + mask2 + mask3 + mask4
+    return ma.masked_array(data, mask=mask)
