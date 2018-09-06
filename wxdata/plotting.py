@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.ma as ma
 import pandas as pd
+import six
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from mpl_toolkits.basemap import Basemap, addcyclic
 
@@ -249,6 +250,15 @@ def inset_colorbar(mappable, ax=None, width='60%', height='3%', loc=1, tickcolor
     return cbar, cbar_ax
 
 
+def right_side_colorbar(ax=None, label=None):
+    if ax is None:
+        ax = plt.gca()
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="2%", pad=0.03)
+    plt.colorbar(cax=cax, orientation='vertical', label=label, extendrect=True)
+
+
 ## Color sampling
 
 def sample_colors(n, src_cmap):
@@ -276,6 +286,15 @@ class ColorSamples(object):
 
     def __len__(self):
         return self.n_samples
+
+
+def truncated_cmap(cmap_src, minval=0.0, maxval=1.0, n=100):
+    if isinstance(cmap_src, six.string_types):
+        cmap_src = plt.get_cmap(cmap_src)
+
+    new_cmap = mcolors.LinearSegmentedColormap.from_list(
+        'truncated_{}'.format(cmap_src), cmap_src(np.linspace(minval, maxval, n)))
+    return new_cmap
 
 
 ## Utilities

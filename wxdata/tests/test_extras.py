@@ -1,9 +1,11 @@
 import os
 
+import numpy as np
 import pandas as pd
+import xarray as xr
 
 from wxdata import stormevents, _timezones as _tz
-from wxdata.extras import assert_clusters_equal, st_clusters
+from wxdata.extras import assert_clusters_equal, st_clusters, lat_weighted_spread
 from wxdata.extras.clusters import Cluster, NOISE_LABEL
 from wxdata.testing import resource_path
 
@@ -43,3 +45,12 @@ def test_find_st_clusters():
     assert_clusters_equal(actual_outliers, expected_outliers)
     for actual, expected in zip(actual_torclusters, expected_torclusters):
         assert_clusters_equal(actual, expected)
+
+
+def test_lat_weighted_spread():
+    ds = xr.open_dataarray(resource_path('gfs_ens_init_18090500_valid_18091300.nc'))
+    ens_sd = ds.std('ens')
+    spread_act = lat_weighted_spread(ens_sd, 'hgtprs', reducer=np.median)
+
+    spread_exp = np.load(resource_path('lat_weighted_spread_expected.npy'))
+    assert np.allclose(spread_act, spread_exp)
