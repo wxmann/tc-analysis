@@ -39,15 +39,16 @@ def _load_ibtracs_df(url):
 def delta(df, quantity, dt='6 hr'):
     series = {}
     dt = pd.Timedelta(dt)
-    for index, row in df.iterrows():
-        current_time = row.iso_time
-        next_time = current_time + dt
-        try:
-            next_row = df[df.iso_time == next_time].iloc[0]
-            dquantity = next_row[quantity] - row[quantity]
-            series[index] = dquantity
-        except IndexError:
-            continue
+    for _, storm in df.groupby('serial_num'):
+        for index, row in storm.iterrows():
+            current_time = row.iso_time
+            next_time = current_time + dt
+            try:
+                next_row = storm[storm.iso_time == next_time].iloc[0]
+                dquantity = next_row[quantity] - row[quantity]
+                series[index] = dquantity
+            except (IndexError, KeyError):
+                continue
 
     return pd.Series(series)
 
@@ -59,24 +60,28 @@ def label_ri(df, keep_dwind=False, dwind_col=None):
     else:
         df['dwind'] = df[dwind_col]
 
-    for index, row in df.iterrows():
-        if row['dwind'] >= 30.0:
-            init_time = row.iso_time
-            labels[index] = True
-            internal_index = index
+    for _, storm in df.groupby('serial_num'):
+        for index, row in storm.iterrows():
+            if row['dwind'] >= 30.0:
+                init_time = row.iso_time
+                labels[index] = True
+                internal_index = index
 
-            while True:
-                internal_index += 1
-                next_row = df.loc[internal_index]
-                next_time = next_row.iso_time
+                while True:
+                    internal_index += 1
+                    try:
+                        next_row = storm.loc[internal_index]
+                    except KeyError:
+                        break
+                    next_time = next_row.iso_time
 
-                if next_time > init_time + pd.Timedelta('24 hours'):
-                    labels[next_row.name] = False
-                    break
-                else:
-                    labels[next_row.name] = True
-        elif index not in labels:
-            labels[index] = False
+                    if next_time > init_time + pd.Timedelta('24 hours'):
+                        labels[next_row.name] = False
+                        break
+                    else:
+                        labels[next_row.name] = True
+            elif index not in labels:
+                labels[index] = False
 
     if not keep_dwind or (dwind_col is not None and dwind_col != 'dwind'):
         del df['dwind']
@@ -86,27 +91,29 @@ def label_ri(df, keep_dwind=False, dwind_col=None):
 def heading(df, dt='6 hr', to_xy=True, xy_unit='kt'):
     points = []
     dt = pd.Timedelta(dt)
-    for index, row in df.iterrows():
-        current_time = row.iso_time
-        result = {}
-        this_row = row
-        try:
-            next_time = current_time + dt
-            next_row = df[(df.iso_time == next_time) & (df.serial_num == row.serial_num)].iloc[0]
-        except IndexError:
-            # we don't have a position at that hour. Maybe we've reached the end?
-            continue
+    for _, storm in df.groupby('serial_num'):
+        for index, row in storm.iterrows():
+            current_time = row.iso_time
+            result = {}
+            this_row = row
+            try:
+                next_time = current_time + dt
+                next_row = storm[storm.iso_time == next_time].iloc[0]
+            except IndexError:
+                # we don't have a position at that hour. Maybe we've reached the end?
+                continue
 
-        this_point = (this_row.latitude, this_row.longitude)
-        next_point = (next_row.latitude, next_row.longitude)
+            this_point = (this_row.latitude, this_row.longitude)
+            next_point = (next_row.latitude, next_row.longitude)
 
-        result['angle'] = angle_between(this_point, next_point)
-        result['dist'] = dist_between(this_point, next_point)
-        result['name'] = row['name']
-        result['season'] = row['season']
-        result['iso_time'] = row.iso_time
+            result['angle'] = angle_between(this_point, next_point)
+            result['dist'] = dist_between(this_point, next_point)
+            result['name'] = row['name']
+            result['season'] = row['season']
+            result['iso_time'] = row.iso_time
+            result['serial_num'] = row.serial_num
 
-        points.append(result)
+            points.append(result)
 
     ret = pd.DataFrame(points)
 
@@ -115,7 +122,7 @@ def heading(df, dt='6 hr', to_xy=True, xy_unit='kt'):
         ret['y'] = ret['dist'] * np.sin(ret['angle'])
 
         if xy_unit == 'kt':
-            ret['x'] = ret.x * 0.54 / dt.hours
-            ret['y'] = ret.y * 0.54 / dt.hours
+            ret['x'] = ret.x * 0.54 / (dt.total_seconds() / 3600)
+            ret['y'] = ret.y * 0.54 / (dt.total_seconds() / 3600)
 
     return ret
