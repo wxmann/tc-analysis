@@ -71,6 +71,7 @@ def persistent_cache(saveloc=None, filename='cache', debug=False):
     return decorator
 
 
+# TODO: this has been moved to the geog module
 @persistent_cache(filename='cities')
 def find_latlon(loc, geocodor=None):
     if geocodor is None:

@@ -60,6 +60,7 @@ def simple_basemap(bbox, proj='merc', resolution='i', ax=None,
 
 great_plains = partial(simple_basemap, bbox=(-110, -88, 27.5, 50))
 srn_plains = partial(simple_basemap, bbox=(-110, -88, 27.5, 40))
+atlantic_basin = partial(simple_basemap, bbox=(-108, 0, 0, 63), us_detail=False)
 
 
 def _draw_in_basemap(basemap, layers):
