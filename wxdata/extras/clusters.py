@@ -250,26 +250,44 @@ class Cluster(object):
             'center': self.centroid
         }
 
-    def describe_tors(self, show_index=False):
-        if self._index == NOISE_LABEL:
-            time_part = '(Outliers)'
-        else:
-            time_part = '{} to {}'.format(self.begin_time.strftime('%Y-%m-%d %H:%M'),
-                                          self.end_time.strftime('%Y-%m-%d %H:%M'))
-            if show_index:
-                time_part = '({}) '.format(self.index) + time_part
+    def describe_tors(self, show_index=False, info=None, tz=None):
+        if info is None:
+            info = ['time', 'segments', 'casualties', 'minutes']
+
+        to_join = []
+
+        if 'time' in info:
+            if self._index == NOISE_LABEL:
+                time_part = '(Outliers)'
+            else:
+                time_part = '{} to {}'.format(self.begin_time.strftime('%Y-%m-%d %H:%M'),
+                                              self.end_time.strftime('%Y-%m-%d %H:%M'))
+                if tz is not None:
+                    time_part += ' {}'.format(tz)
+                if show_index:
+                    time_part = '({}) '.format(self.index) + time_part
+            to_join.append(time_part)
 
         stats = self.tor_stats()
 
-        ef_labels = ['EF{}'.format(f) for f in range(0, 6)]
-        ef_parts = ['{}: {}'.format(label, stats[label.lower()]) for label in ef_labels]
-        if stats['ef?']:
-            ef_parts.append('EF?: {}'.format(stats['ef?']))
+        if 'segments' in info:
+            ef_labels = ['EF{}'.format(f) for f in range(0, 6)]
+            ef_parts = ['{}: {}'.format(label, stats[label.lower()]) for label in ef_labels]
+            if stats['ef?']:
+                ef_parts.append('EF?: {}'.format(stats['ef?']))
 
-        segments_part = '{} segments ({})'.format(stats['segments'], ', '.join(ef_parts))
-        casualty_part = '{} fatalities | {} injuries'.format(stats['fatalities'], stats['injuries'])
+            segments_part = '{} segments ({})'.format(stats['segments'], ', '.join(ef_parts))
+            to_join.append(segments_part)
 
-        return '\n'.join([time_part, segments_part, casualty_part])
+        if 'casualties' in info:
+            casualty_part = '{} fatalities | {} injuries'.format(stats['fatalities'], stats['injuries'])
+            to_join.append(casualty_part)
+
+        if 'minutes' in info:
+            length_part = '{} tornado minutes'.format(len(self))
+            to_join.append(length_part)
+
+        return '\n'.join(to_join)
 
     def tor_stats(self):
         if self._parent is None:

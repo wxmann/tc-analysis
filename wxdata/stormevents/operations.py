@@ -21,6 +21,14 @@ def filter_on_date(df, date_, tz_localize=True, tz=None):
     return _filter_on_timeperiod(df, t1, '1 day', tz_localize, tz)
 
 
+def filter_on_spc_day(df, date_, tz_localize=True, tz=None):
+    date_ = pd.Timestamp(date_)
+    year, month, day = date_.year, date_.month, date_.day
+
+    t1 = pd.Timestamp(year=year, month=month, day=day, hour=12, minute=0)
+    return _filter_on_timeperiod(df, t1, '1 day', tz_localize, tz)
+
+
 def filter_on_year(df, year, tz_localize=True, tz=None):
     t1 = pd.Timestamp(year=year, month=1, day=1, hour=0, minute=0)
     return _filter_on_timeperiod(df, t1, '1 year', tz_localize, tz)
